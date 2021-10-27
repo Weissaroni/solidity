@@ -28,14 +28,14 @@ verify_input "$@"
 BINARY_TYPE="$1"
 BINARY_PATH="$2"
 
-function compile_fn { npx truffle compile; }
-function test_fn { npm run test; }
+function compile_fn { yarn build; }
+function test_fn { yarn test; }
 
 function ens_test
 {
-    local repo="https://github.com/ensdomains/ens.git"
+    local repo="https://github.com/ensdomains/ens-contracts.git"
     local branch=master
-    local config_file="truffle.js"
+    local config_file="hardhat.config.js"
     local min_optimizer_level=1
     local max_optimizer_level=3
 
@@ -47,20 +47,18 @@ function ens_test
     download_project "$repo" "$branch" "$DIR"
     [[ $BINARY_TYPE == native ]] && replace_global_solc "$BINARY_PATH"
 
-    # Use latest Truffle. Older versions crash on the output from 0.8.0.
-    force_truffle_version ^5.1.55
-
     neutralize_package_lock
     neutralize_package_json_hooks
-    force_truffle_compiler_settings "$config_file" "$BINARY_TYPE" "${DIR}/solc" "$min_optimizer_level"
-    npm install
+    force_hardhat_compiler_binary "$config_file" "$BINARY_TYPE" "$BINARY_PATH"
+    force_hardhat_compiler_settings "$config_file" "$min_optimizer_level"
+    yarn install
 
     replace_version_pragmas
-    [[ $BINARY_TYPE == solcjs ]] && force_solc_modules "${DIR}/solc"
+    neutralize_packaged_contracts
 
     for level in $selected_optimizer_levels; do
-        truffle_run_test "$config_file" "$BINARY_TYPE" "${DIR}/solc" "$level" compile_fn test_fn
+        hardhat_run_test "$config_file" "$level" compile_fn test_fn
     done
 }
 
-external_test Ens ens_test
+external_test ENS ens_test
