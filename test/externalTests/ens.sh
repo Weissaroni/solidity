@@ -36,7 +36,7 @@ function ens_test
     local repo="https://github.com/ensdomains/ens-contracts.git"
     local branch=master
     local config_file="hardhat.config.js"
-    local min_optimizer_level=1
+    local min_optimizer_level=2
     local max_optimizer_level=3
 
     local selected_optimizer_levels
