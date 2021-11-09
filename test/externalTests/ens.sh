@@ -34,7 +34,7 @@ function test_fn { yarn test; }
 function ens_test
 {
     local repo="https://github.com/ensdomains/ens-contracts.git"
-    local branch="52d8297b1634dbed7dc1b4b8a2c3b9faa6b7de77" # master as of 2021-11-09
+    local branch=master
     local config_file="hardhat.config.js"
     local min_optimizer_level=2
     local max_optimizer_level=3
