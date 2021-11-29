@@ -223,8 +223,12 @@ function hardhat_verify_compiler_version
     local full_solc_version="$2"
 
     printLog "Verify that the correct version (${solc_version}/${full_solc_version}) of the compiler was used to compile the contracts..."
-    grep '"solcVersion": "'"${solc_version}"'"' --with-filename artifacts/build-info/*.json || fail "Wrong compiler version detected."
-    grep '"solcLongVersion": "'"${full_solc_version}"'"' --with-filename artifacts/build-info/*.json || fail "Wrong compiler version detected."
+    local build_info_files
+    build_info_files=$(find . -path '*artifacts/build-info/*.json')
+    for build_info_file in $build_info_files; do
+        grep '"solcVersion": "'"${solc_version}"'"' --with-filename "$build_info_file" || fail "Wrong compiler version detected in ${build_info_file}."
+        grep '"solcLongVersion": "'"${full_solc_version}"'"' --with-filename "$build_info_file" || fail "Wrong compiler version detected in ${build_info_file}."
+    done
 }
 
 function truffle_clean
