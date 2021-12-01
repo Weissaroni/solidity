@@ -1,11 +1,12 @@
 #!/usr/bin/env python3.8
 
 import argparse
+import fnmatch
 import json
 import os
 import subprocess
 
-from typing import List, Union, Any
+from typing import List, Any
 from deepdiff import DeepDiff
 
 # {{{ JsonRpcProcess
@@ -22,7 +23,7 @@ class JsonRpcProcess:
     process: subprocess.Popen
     trace_io: bool
 
-    def __init__(self, exe_path: str, exe_args: List[str], trace_io: bool = False):
+    def __init__(self, exe_path: str, exe_args: List[str], trace_io: bool = True):
         self.exe_path = exe_path
         self.exe_args = exe_args
         self.trace_io = trace_io
@@ -116,6 +117,46 @@ class ExpectationFailed(Exception):
             f"Expectation failed. Expected {expected} but got {actual}. {diff}"
         )
 
+def create_cli_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description='Solidity LSP Test suite')
+    parser.set_defaults(trace_io=False)
+    parser.add_argument(
+        '-T, --trace-io',
+        dest='trace_io',
+        action='store_true',
+        help='Be more verbose by also printing assertions.'
+    )
+    parser.set_defaults(print_assertions=False)
+    parser.add_argument(
+        '-v, --print-assertions',
+        dest='print_assertions',
+        action='store_true',
+        help='Be more verbose by also printing assertions.'
+    )
+    parser.add_argument(
+        '-t, --test-pattern',
+        dest='test_pattern',
+        type=str,
+        default="*",
+        help='Filters all available tests by matching against this test pattern (using globbing)',
+        nargs="?"
+    )
+    parser.add_argument(
+        'solc_path',
+        type=str,
+        default="/home/trapni/work/solidity/build/solc/solc",
+        help='Path to solc binary to test against',
+        nargs="?"
+    )
+    parser.add_argument(
+        'project_root_dir',
+        type=str,
+        default=f"{os.path.dirname(os.path.realpath(__file__))}/..",
+        help='Path to Solidity project\'s root directory (must be fully qualified).',
+        nargs="?"
+    )
+    return parser
+
 # pylint: disable-next=too-many-instance-attributes
 class SolidityLSPTestSuite: # {{{
     tests_passed: int = 0
@@ -124,41 +165,17 @@ class SolidityLSPTestSuite: # {{{
     assertions_passed: int = 0
     assertions_failed: int = 0
     print_assertions: bool = False
+    trace_io: bool = False
+    test_pattern: str
 
     def __init__(self):
-        self.solc_path, self.project_root_dir, self.print_assertions = self.parse_args_and_prepare()
+        args = create_cli_parser().parse_args()
+        self.solc_path = args.solc_path
+        self.project_root_dir = os.path.realpath(args.project_root_dir) + '/test/libsolidity/lsp'
         self.project_root_uri = 'file://' + self.project_root_dir
-
-    def parse_args_and_prepare(self):
-        """
-        Parses CLI args and returns tuple of path to solc executable
-        and path to solidity-project root dir.
-        """
-        parser = argparse.ArgumentParser(description='Solidity LSP Test suite')
-        parser.set_defaults(print_assertions=False)
-        parser.add_argument(
-            '-v, --print-assertions',
-            dest='print_assertions',
-            action='store_true',
-            help='Be more verbose by also printing assertions.'
-        )
-        parser.add_argument(
-            'solc_path',
-            type=str,
-            default="/home/trapni/work/solidity/build/solc/solc",
-            help='Path to solc binary to test against',
-            nargs="?"
-        )
-        parser.add_argument(
-            'project_root_dir',
-            type=str,
-            default=f"{os.path.dirname(os.path.realpath(__file__))}/..",
-            help='Path to Solidity project\'s root directory (must be fully qualified).',
-            nargs="?"
-        )
-        args = parser.parse_args()
-        project_root_dir = os.path.realpath(args.project_root_dir) + '/test/libsolidity/lsp'
-        return [args.solc_path, project_root_dir, args.print_assertions]
+        self.print_assertions = args.print_assertions
+        self.trace_io = args.trace_io
+        self.test_pattern = args.test_pattern
 
     def main(self) -> int:
         """
@@ -166,17 +183,15 @@ class SolidityLSPTestSuite: # {{{
         Returns 0 on success and the number of failing assertions (capped to 127) otherwise.
         """
 
-        for method_name in sorted([name for name
+        for method_name in fnmatch.filter(sorted([name for name
                             in dir(SolidityLSPTestSuite)
                             if callable(getattr(SolidityLSPTestSuite, name)) and
-                                name.startswith("test_")]):
+                                name.startswith("test_")]), self.test_pattern):
             test_fn = getattr(self, method_name)
-            title: str = test_fn.__name__
-            if test_fn.__doc__ != None:
-                title = test_fn.__doc__.strip()
+            title: str = test_fn.__name__[5:]
             print(f"{SGR_TEST_BEGIN}Testing {title} ...{SGR_RESET}")
             try:
-                with JsonRpcProcess(self.solc_path, ["--lsp"]) as solc:
+                with JsonRpcProcess(self.solc_path, ["--lsp"], trace_io=self.trace_io) as solc:
                     test_fn(solc)
                     self.tests_passed = self.tests_passed + 1
             except ExpectationFailed as e:
@@ -233,12 +248,42 @@ class SolidityLSPTestSuite: # {{{
         return "file://" + self.get_test_file_path(test_case_name)
 
     def get_test_file_contents(self, test_case_name):
+        """
+        Reads the file contents from disc for a given test case.
+        The `test_case_name` will be the basename of the file
+        in the test path (test/libsolidity/lsp).
+        """
         return open(self.get_test_file_path(test_case_name), mode="r", encoding="utf-8").read()
 
-    def extract_params_for_method(self, method_name: str, message: Any) -> Union[Any, None]:
-        if message['method'] != method_name:
-            return None
+    def require_params_for_method(self, method_name: str, message: Any) -> Any:
+        """
+        Ensures the given RPC message does contain the
+        field 'method' with the given method name,
+        and then returns its passed params.
+        An exception is raised on expectation failures.
+        """
+        if 'error' in message.keys():
+            code = message['error']["code"]
+            text = message['error']['message']
+            raise RuntimeError(f"Error {code} received. {text}")
+        if not 'method' in message.keys():
+            raise RuntimeError("No method received but something else.")
+        self.expect_equal(message['method'], method_name, "Ensure expected method name")
         return message['params']
+
+    def wait_for_diagnostics(self, solc: JsonRpcProcess, count: int) -> List[Any]:
+        """
+        Return `count` number of published diagnostic reports sorted by file URI.
+        """
+        reports = []
+        for _ in range(0, count):
+            reports.append(
+                self.require_params_for_method(
+                    'textDocument/publishDiagnostics',
+                    solc.receive_message()
+                )
+            )
+        return sorted(reports, key=lambda x: x['uri'])
 
     def open_file_and_wait_for_diagnostics(self,
                                            solc: JsonRpcProcess,
@@ -247,8 +292,7 @@ class SolidityLSPTestSuite: # {{{
         """
         Opens file for given test case and waits for diagnostics to be published.
         """
-        reports = []
-        reply = solc.call_method('textDocument/didOpen',
+        solc.send_message('textDocument/didOpen',
             {
                 'textDocument': {
                     'uri': self.get_test_file_uri(test_case_name),
@@ -258,19 +302,7 @@ class SolidityLSPTestSuite: # {{{
                 }
             }
         )
-        diags = self.extract_params_for_method('textDocument/publishDiagnostics', reply)
-        if diags == None:
-            raise RuntimeError(f"Unepxected response from RPC endpoint: {reply}")
-        reports.append(diags)
-        # reply now contains one "textDocument/publishDiagnostics" notification
-        while diagnostic_reports > 1:
-            diagnostic_reports -= 1
-            reply = solc.receive_message()
-            diags = self.extract_params_for_method('textDocument/publishDiagnostics', reply)
-            if diags == None:
-                raise RuntimeError(f"Unepxected response from RPC endpoint: {reply}")
-            reports.append(diags)
-        return reports
+        return self.wait_for_diagnostics(solc, diagnostic_reports)
 
     def expect_equal(self, actual, expected, description="Equality") -> None:
         self.assertion_count = self.assertion_count + 1
@@ -299,8 +331,7 @@ class SolidityLSPTestSuite: # {{{
     # }}}
 
     # {{{ actual tests
-    def test_publish_diagnostics_1(self, solc: JsonRpcProcess) -> None:
-        """ Publish diagnostics (warnings) """
+    def test_publish_diagnostics_warnings(self, solc: JsonRpcProcess) -> None:
         self.setup_lsp(solc)
         TEST_NAME = 'publish_diagnostics_1'
         published_diagnostics = self.open_file_and_wait_for_diagnostics(solc, TEST_NAME)
@@ -316,8 +347,7 @@ class SolidityLSPTestSuite: # {{{
         self.expect_diagnostic(diagnostics[1], code=2072, lineNo= 7, startColumn= 8, endColumn=19)
         self.expect_diagnostic(diagnostics[2], code=2072, lineNo=15, startColumn= 8, endColumn=20)
 
-    def test_publish_diagnostics_2(self, solc: JsonRpcProcess) -> None:
-        """ Publish diagnostics (errors) """
+    def test_publish_diagnostics_errors(self, solc: JsonRpcProcess) -> None:
         self.setup_lsp(solc)
         TEST_NAME = 'publish_diagnostics_2'
         published_diagnostics = self.open_file_and_wait_for_diagnostics(solc, TEST_NAME)
@@ -333,8 +363,7 @@ class SolidityLSPTestSuite: # {{{
         self.expect_diagnostic(diagnostics[1], code=6777, lineNo= 8, startColumn= 8, endColumn=15)
         self.expect_diagnostic(diagnostics[2], code=6160, lineNo=18, startColumn=15, endColumn=36)
 
-    def test_didOpen_with_relative_import(self, solc: JsonRpcProcess) -> None:
-        """ didOpen with relative import """
+    def test_textDocument_didOpen_with_relative_import(self, solc: JsonRpcProcess) -> None:
         self.setup_lsp(solc)
         TEST_NAME = 'didOpen_with_import'
         published_diagnostics = self.open_file_and_wait_for_diagnostics(solc, TEST_NAME, 2)
@@ -344,7 +373,7 @@ class SolidityLSPTestSuite: # {{{
         # primary file:
         report = published_diagnostics[0]
         self.expect_equal(report['uri'], self.get_test_file_uri(TEST_NAME), "Correct file URI")
-        self.expect_equal(len(report['diagnostics']), 0, "one diagnostic")
+        self.expect_equal(len(report['diagnostics']), 0, "no diagnostics")
 
         # imported file (./lib.sol):
         report = published_diagnostics[1]
@@ -352,17 +381,20 @@ class SolidityLSPTestSuite: # {{{
         self.expect_equal(len(report['diagnostics']), 1, "one diagnostic")
         self.expect_diagnostic(report['diagnostics'][0], code=2072, lineNo=12, startColumn=8, endColumn=19)
 
-    def test_didOpen_with_relative_import_without_project(self, solc: JsonRpcProcess) -> None:
-        """ didOpen with relative import with no project URL given """
+    def test_textDocument_didOpen_with_relative_import_without_project_url(self, solc: JsonRpcProcess) -> None:
         self.setup_lsp(solc, expose_project_root=False)
         TEST_NAME = 'didOpen_with_import'
         published_diagnostics = self.open_file_and_wait_for_diagnostics(solc, TEST_NAME, 2)
+        self.verify_didOpen_with_import_diagnostics(published_diagnostics)
 
+    def verify_didOpen_with_import_diagnostics(self,
+            published_diagnostics: List[Any],
+            main_file_name='didOpen_with_import'):
         self.expect_equal(len(published_diagnostics), 2, "Diagnostic reports for 2 files")
 
         # primary file:
         report = published_diagnostics[0]
-        self.expect_equal(report['uri'], self.get_test_file_uri(TEST_NAME), "Correct file URI")
+        self.expect_equal(report['uri'], self.get_test_file_uri(main_file_name), "Correct file URI")
         self.expect_equal(len(report['diagnostics']), 0, "one diagnostic")
 
         # imported file (./lib.sol):
@@ -370,6 +402,114 @@ class SolidityLSPTestSuite: # {{{
         self.expect_equal(report['uri'], self.get_test_file_uri('lib'), "Correct file URI")
         self.expect_equal(len(report['diagnostics']), 1, "one diagnostic")
         self.expect_diagnostic(report['diagnostics'][0], code=2072, lineNo=12, startColumn=8, endColumn=19)
+
+    def test_textDocument_didChange_delete_line(self, solc: JsonRpcProcess) -> None:
+        # Reuse this test to prepare and ensure it is as expected
+        self.test_textDocument_didOpen_with_relative_import(solc)
+        # lib.sol: Fix the unused variable message by removing it.
+        solc.send_message('textDocument/didChange', {
+            'textDocument': {
+                'uri': self.get_test_file_uri('lib')
+            },
+            'contentChanges': [
+                {
+                    'range': {
+                        'start': { 'line': 12, 'character': 0 },
+                        'end': { 'line': 12, 'character': 20 }
+                    },
+                    'test': ""
+                }
+            ]
+        })
+        published_diagnostics = self.wait_for_diagnostics(solc, 2)
+        self.expect_equal(len(published_diagnostics), 2)
+        report1 = published_diagnostics[0]
+        self.expect_equal(report1['uri'], self.get_test_file_uri('didOpen_with_import'), "Correct file URI")
+        self.expect_equal(len(report1['diagnostics']), 0, "no diagnostics")
+        report2 = published_diagnostics[1]
+        self.expect_equal(report2['uri'], self.get_test_file_uri('lib'), "Correct file URI")
+        self.expect_equal(len(report2['diagnostics']), 0, "no diagnostics")
+
+    def test_textDocument_didChange_at_eol(self, solc: JsonRpcProcess) -> None:
+        """
+        Append at one line and insert a new one below.
+        """
+        self.setup_lsp(solc)
+        FILE_NAME = 'didChange_template'
+        FILE_URI = self.get_test_file_uri(FILE_NAME)
+        solc.send_message('textDocument/didOpen', {
+            'textDocument': {
+                'uri': FILE_URI,
+                'languageId': 'Solidity',
+                'version': 1,
+                'text': self.get_test_file_contents(FILE_NAME)
+            }
+        })
+        published_diagnostics = self.wait_for_diagnostics(solc, 1)
+        solc.send_message('textDocument/didChange', {
+            'textDocument': {
+                'uri': FILE_URI
+            },
+            'contentChanges': [
+                {
+                    'range': {
+                        'start': { 'line': 3, 'character': 7 },
+                        'end': { 'line': 3, 'character': 7 }
+                    },
+                    'test': " C"
+                }
+            ]
+        })
+        published_diagnostics = self.wait_for_diagnostics(solc, 1)
+        self.expect_equal(len(published_diagnostics), 1)
+        report1 = published_diagnostics[0]
+        self.expect_equal(report1['uri'], FILE_URI, "Correct file URI")
+        self.expect_equal(len(report1['diagnostics']), 1, "one diagnostic")
+        # TODO: not done yet. we're getting the wrong diagnostic back (as if we didn't edit)
+
+    def test_textDocument_didChange_empty_file(self, solc: JsonRpcProcess) -> None:
+        """
+        Starts with an empty file and changes it to look like
+        the didOpen_with_import test case. Then we can use
+        the same verification calls to ensure it worked as expected.
+        """
+        # This FILE_NAME must be alphabetically before lib.sol to not over-complify
+        # the test logic in verify_didOpen_with_import_diagnostics.
+        FILE_NAME = 'a_new_file'
+        FILE_URI = self.get_test_file_uri(FILE_NAME)
+        self.setup_lsp(solc)
+        solc.send_message('textDocument/didOpen', {
+            'textDocument': {
+                'uri': FILE_URI,
+                'languageId': 'Solidity',
+                'version': 1,
+                'text': ''
+            }
+        })
+        reports = self.wait_for_diagnostics(solc, 1)
+        self.expect_equal(len(reports), 1)
+        report = reports[0]
+        published_diagnostics = report['diagnostics']
+        self.expect_equal(len(published_diagnostics), 2)
+        self.expect_diagnostic(published_diagnostics[0], code=1878, lineNo=0, startColumn=0, endColumn=0)
+        self.expect_diagnostic(published_diagnostics[1], code=3420, lineNo=0, startColumn=0, endColumn=0)
+        solc.send_message('textDocument/didChange', {
+            'textDocument': {
+                'uri': self.get_test_file_uri('a_new_file')
+            },
+            'contentChanges': [
+                {
+                    'range': {
+                        'start': { 'line': 0, 'character': 0 },
+                        'end': { 'line': 0, 'character': 0 }
+                    },
+                    'text': self.get_test_file_contents('didOpen_with_import')
+                }
+            ]
+        })
+        published_diagnostics = self.wait_for_diagnostics(solc, 2)
+        self.verify_didOpen_with_import_diagnostics(published_diagnostics, 'a_new_file')
+
     # }}}
     # }}}
 
