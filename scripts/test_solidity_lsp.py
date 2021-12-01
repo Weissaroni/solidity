@@ -5,7 +5,7 @@ import json
 import os
 import subprocess
 
-from typing import Callable, List, Union, Any
+from typing import List, Union, Any
 from deepdiff import DeepDiff
 
 # {{{ JsonRpcProcess
@@ -123,9 +123,10 @@ class SolidityLSPTestSuite: # {{{
     assertion_count: int = 0   # number of total assertions executed so far
     assertions_passed: int = 0
     assertions_failed: int = 0
+    print_assertions: bool = False
 
     def __init__(self):
-        self.solc_path, self.project_root_dir = self.parse_args_and_prepare()
+        self.solc_path, self.project_root_dir, self.print_assertions = self.parse_args_and_prepare()
         self.project_root_uri = 'file://' + self.project_root_dir
 
     def parse_args_and_prepare(self):
@@ -134,6 +135,13 @@ class SolidityLSPTestSuite: # {{{
         and path to solidity-project root dir.
         """
         parser = argparse.ArgumentParser(description='Solidity LSP Test suite')
+        parser.set_defaults(print_assertions=False)
+        parser.add_argument(
+            '-v, --print-assertions',
+            dest='print_assertions',
+            action='store_true',
+            help='Be more verbose by also printing assertions.'
+        )
         parser.add_argument(
             'solc_path',
             type=str,
@@ -150,7 +158,7 @@ class SolidityLSPTestSuite: # {{{
         )
         args = parser.parse_args()
         project_root_dir = os.path.realpath(args.project_root_dir) + '/test/libsolidity/lsp'
-        return [args.solc_path, project_root_dir]
+        return [args.solc_path, project_root_dir, args.print_assertions]
 
     def main(self) -> int:
         """
@@ -158,11 +166,22 @@ class SolidityLSPTestSuite: # {{{
         Returns 0 on success and the number of failing assertions (capped to 127) otherwise.
         """
 
-        for method_name in [name for name
+        for method_name in sorted([name for name
                             in dir(SolidityLSPTestSuite)
                             if callable(getattr(SolidityLSPTestSuite, name)) and
-                                name.startswith("test_")]:
-            self.run_with_solc(getattr(self, method_name))
+                                name.startswith("test_")]):
+            test_fn = getattr(self, method_name)
+            title: str = test_fn.__name__
+            if test_fn.__doc__ != None:
+                title = test_fn.__doc__.strip()
+            print(f"{SGR_TEST_BEGIN}Testing {title} ...{SGR_RESET}")
+            try:
+                with JsonRpcProcess(self.solc_path, ["--lsp"]) as solc:
+                    test_fn(solc)
+                    self.tests_passed = self.tests_passed + 1
+            except ExpectationFailed as e:
+                print(f"{e}")
+                self.tests_failed = self.tests_failed + 1
 
         print(
             f"\nSummary:\n\n"
@@ -172,45 +191,39 @@ class SolidityLSPTestSuite: # {{{
 
         return min(self.assertions_failed, 127)
 
-    def run_with_solc(self, test_fn: Callable[[JsonRpcProcess], None]) -> None:
+    def setup_lsp(self, lsp: JsonRpcProcess, expose_project_root=True):
         """
-        Spawns solc in LSP mode and passes it to the called test-case function to be executed.
-        If this test passed or failed will be tracked.
+        Prepares the solc LSP server by calling `initialize`,
+        and `initialized` methods.
         """
-        title: str = test_fn.__name__
-        if test_fn.__doc__ != None:
-            title = test_fn.__doc__.strip()
-        print(f"{SGR_TEST_BEGIN}Testing {title} ...{SGR_RESET}")
-        try:
-            with JsonRpcProcess(self.solc_path, ["--lsp"]) as solc:
-                project_root_uri = 'file://' + self.project_root_dir
-                workspace_folders = [ {'name': 'solidity-lsp', 'uri': project_root_uri} ]
-                solc.call_method('initialize', {
-                    'processId': None,
-                    'rootPath': self.project_root_dir,
-                    'rootUri': project_root_uri,
-                    'trace': 'off',
-                    'workspaceFolders': workspace_folders,
-                    'initializationOptions': {},
-                    'capabilities': {
-                        'textDocument': {
-                            'publishDiagnostics': {'relatedInformation': True}
-                        },
-                        'workspace': {
-                            'applyEdit': True,
-                            'configuration': True,
-                            'didChangeConfiguration': {'dynamicRegistration': True},
-                            'workspaceEdit': {'documentChanges': True},
-                            'workspaceFolders': True
-                        }
-                    }
-                })
-                solc.send_notification('initialized')
-                test_fn(solc)
-                self.tests_passed = self.tests_passed + 1
-        except ExpectationFailed as e:
-            print(f"{e}")
-            self.tests_failed = self.tests_failed + 1
+        project_root_uri = 'file://' + self.project_root_dir
+        params = {
+            'processId': None,
+            'rootPath': self.project_root_dir,
+            'rootUri': project_root_uri,
+            'trace': 'off',
+            'workspaceFolders': [
+                {'name': 'solidity-lsp', 'uri': project_root_uri}
+            ],
+            'initializationOptions': {},
+            'capabilities': {
+                'textDocument': {
+                    'publishDiagnostics': {'relatedInformation': True}
+                },
+                'workspace': {
+                    'applyEdit': True,
+                    'configuration': True,
+                    'didChangeConfiguration': {'dynamicRegistration': True},
+                    'workspaceEdit': {'documentChanges': True},
+                    'workspaceFolders': True
+                }
+            }
+        }
+        if expose_project_root == False:
+            params['rootUri'] = None
+            params['rootPath'] = None
+        lsp.call_method('initialize', params)
+        lsp.send_notification('initialized')
 
     # {{{ helpers
     def get_test_file_path(self, test_case_name):
@@ -265,9 +278,11 @@ class SolidityLSPTestSuite: # {{{
         diff = DeepDiff(actual, expected)
         if len(diff) == 0:
             self.assertions_passed = self.assertions_passed + 1
-            print(prefix + SGR_STATUS_OKAY + 'OK' + SGR_RESET)
+            if self.print_assertions:
+                print(prefix + SGR_STATUS_OKAY + 'OK' + SGR_RESET)
             return
 
+        # Failed assertions are always printed.
         self.assertions_failed = self.assertions_failed + 1
         print(prefix + SGR_STATUS_FAIL + 'FAILED' + SGR_RESET)
         raise ExpectationFailed(actual, expected)
@@ -286,6 +301,7 @@ class SolidityLSPTestSuite: # {{{
     # {{{ actual tests
     def test_publish_diagnostics_1(self, solc: JsonRpcProcess) -> None:
         """ Publish diagnostics (warnings) """
+        self.setup_lsp(solc)
         TEST_NAME = 'publish_diagnostics_1'
         published_diagnostics = self.open_file_and_wait_for_diagnostics(solc, TEST_NAME)
 
@@ -302,6 +318,7 @@ class SolidityLSPTestSuite: # {{{
 
     def test_publish_diagnostics_2(self, solc: JsonRpcProcess) -> None:
         """ Publish diagnostics (errors) """
+        self.setup_lsp(solc)
         TEST_NAME = 'publish_diagnostics_2'
         published_diagnostics = self.open_file_and_wait_for_diagnostics(solc, TEST_NAME)
 
@@ -318,6 +335,26 @@ class SolidityLSPTestSuite: # {{{
 
     def test_didOpen_with_relative_import(self, solc: JsonRpcProcess) -> None:
         """ didOpen with relative import """
+        self.setup_lsp(solc)
+        TEST_NAME = 'didOpen_with_import'
+        published_diagnostics = self.open_file_and_wait_for_diagnostics(solc, TEST_NAME, 2)
+
+        self.expect_equal(len(published_diagnostics), 2, "Diagnostic reports for 2 files")
+
+        # primary file:
+        report = published_diagnostics[0]
+        self.expect_equal(report['uri'], self.get_test_file_uri(TEST_NAME), "Correct file URI")
+        self.expect_equal(len(report['diagnostics']), 0, "one diagnostic")
+
+        # imported file (./lib.sol):
+        report = published_diagnostics[1]
+        self.expect_equal(report['uri'], self.get_test_file_uri('lib'), "Correct file URI")
+        self.expect_equal(len(report['diagnostics']), 1, "one diagnostic")
+        self.expect_diagnostic(report['diagnostics'][0], code=2072, lineNo=12, startColumn=8, endColumn=19)
+
+    def test_didOpen_with_relative_import_without_project(self, solc: JsonRpcProcess) -> None:
+        """ didOpen with relative import with no project URL given """
+        self.setup_lsp(solc, expose_project_root=False)
         TEST_NAME = 'didOpen_with_import'
         published_diagnostics = self.open_file_and_wait_for_diagnostics(solc, TEST_NAME, 2)
 
