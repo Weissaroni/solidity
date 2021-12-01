@@ -73,6 +73,9 @@ public:
 	/// Does not enforce @a allowedDirectories().
 	void addOrUpdateFile(boost::filesystem::path const& _path, SourceCode _source);
 
+	/// Adds the source code directly without normalizing the source unit name.
+	void setSourceDirectly(std::string _sourceUnitName, SourceCode _source);
+
 	/// Adds the source code under the source unit name of @a <stdin>.
 	/// Does not enforce @a allowedDirectories().
 	void setStdin(SourceCode _source);
