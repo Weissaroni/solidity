@@ -38,6 +38,8 @@
 #include <libsolidity/interface/DebugSettings.h>
 #include <libsolidity/interface/ImportRemapper.h>
 #include <libsolidity/interface/StorageLayout.h>
+#include <libsolidity/lsp/LanguageServer.h>
+#include <libsolidity/lsp/Transport.h>
 
 #include <libyul/AssemblyStack.h>
 
@@ -56,6 +58,7 @@
 #include <libsolutil/JSON.h>
 
 #include <algorithm>
+#include <fstream>
 #include <memory>
 
 #include <range/v3/view/map.hpp>
@@ -499,7 +502,11 @@ void CommandLineInterface::readInputFiles()
 			m_fileReader.setStdin(readUntilEnd(m_sin));
 	}
 
-	if (m_fileReader.sourceUnits().empty() && !m_standardJsonInput.has_value())
+	if (
+		m_options.input.mode != InputMode::LanguageServer &&
+		m_fileReader.sourceUnits().empty() &&
+		!m_standardJsonInput.has_value()
+	)
 		solThrow(CommandLineValidationError, "All specified input files either do not exist or are not regular files.");
 }
 
@@ -624,6 +631,9 @@ void CommandLineInterface::processInput()
 		m_standardJsonInput.reset();
 		break;
 	}
+	case InputMode::LanguageServer:
+		serveLSP();
+		break;
 	case InputMode::Assembler:
 		assemble(m_options.assembly.inputLanguage, m_options.assembly.targetMachine);
 		break;
@@ -882,6 +892,12 @@ void CommandLineInterface::handleAst()
 			ASTJsonConverter(m_compiler->state(), m_compiler->sourceIndices()).print(sout(), m_compiler->ast(sourceCode.first));
 		}
 	}
+}
+
+void CommandLineInterface::serveLSP()
+{
+	lsp::JSONTransport transport;
+	lsp::LanguageServer{transport}.run();
 }
 
 void CommandLineInterface::link()
