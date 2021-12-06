@@ -3,7 +3,7 @@
 Operators
 =========
 
-Binary operators can be applied even if the two operands do not have the same type.
+Arithmetic and bit operators can be applied even if the two operands do not have the same type.
 For example, you can compute ``y = x + z``, where ``x`` is a ``uint8`` and ``z`` has
 the type ``int32``. In these cases, the following mechanism will be used to determine
 the type in which the operation is computed (this is important in case of overflow)
@@ -15,9 +15,10 @@ and the type of the operator result:
    operand, use the type of the right operand,
 3. otherwise, the operation is not allowed.
 
-In case one of the operands is a literal number it is first converted to its
+In case one of the operands is a :ref:`literal number <rational_literals>` it is first converted to its
 "mobile type", which is the smallest type that can hold the value
 (unsigned types of the same bit-width are considered "smaller" than the signed types).
+If both are literal numbers, the operation is computed with arbitrary precision.
 
 The operator result type is the same as the type the operation is performed in,
 except for comparison operators where the result is always ``bool``.
