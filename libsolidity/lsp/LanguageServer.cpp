@@ -89,11 +89,11 @@ constexpr int toDiagnosticSeverity(Error::Type _errorType)
 LanguageServer::LanguageServer(Transport& _transport):
 	m_client{_transport},
 	m_handlers{
-		{"$/cancelRequest", [](auto, auto) {/*nothing for now as we are synchronous */} },
-		{"cancelRequest", [](auto, auto) {/*nothing for now as we are synchronous */} },
+		{"$/cancelRequest", [](auto, auto) {/*nothing for now as we are synchronous */}},
+		{"cancelRequest", [](auto, auto) {/*nothing for now as we are synchronous */}},
 		{"exit", [this](auto, auto) { m_exitRequested = true; }},
 		{"initialize", bind(&LanguageServer::handleInitialize, this, _1, _2)},
-		{"initialized", [](auto, auto) {} },
+		{"initialized", [](auto, auto) {}},
 		{"shutdown", [this](auto, auto) { m_shutdownRequested = true; }},
 		{"textDocument/didChange", bind(&LanguageServer::handleTextDocumentDidChange, this, _1, _2)},
 		{"textDocument/didClose", [](auto, auto) {/*nothing for now*/}},
