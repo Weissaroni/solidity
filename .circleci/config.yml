@@ -1307,12 +1307,6 @@ workflows:
           binary_type: solcjs
           compile_only: 1
           nodejs_version: '14'
-      - t_ems_ext:
-          <<: *workflow_ubuntu2004_static
-          name: t_native_compile_ext_gnosis
-          project: gnosis
-          binary_type: native
-          compile_only: 1
 
       - t_ems_ext:
           <<: *workflow_emscripten
