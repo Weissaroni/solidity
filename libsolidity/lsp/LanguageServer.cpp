@@ -80,7 +80,8 @@ constexpr int toDiagnosticSeverity(Error::Type _errorType)
 	case Error::Severity::Warning: return 2;
 	case Error::Severity::Info: return 3;
 	}
-	return 1;
+	solAssert(false);
+	return -1;
 }
 
 }
