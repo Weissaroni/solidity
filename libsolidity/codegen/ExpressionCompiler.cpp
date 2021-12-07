@@ -1305,7 +1305,15 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 				{
 					auto const functionPtr = dynamic_cast<FunctionTypePointer>(arguments[0]->annotation().type);
 					solAssert(functionPtr, "");
-					m_context << util::selectorFromSignature(functionPtr->externalSignature());
+
+					if (functionPtr->hasDeclaration())
+						m_context << util::selectorFromSignature(functionPtr->externalSignature());
+					else
+					{
+						m_context << Instruction::SWAP1 << Instruction::POP;
+						/// need to store it as bytes4
+						utils().leftShiftNumberOnStack(224);
+					}
 					dataOnStack = TypeProvider::fixedBytes(4);
 				}
 				else

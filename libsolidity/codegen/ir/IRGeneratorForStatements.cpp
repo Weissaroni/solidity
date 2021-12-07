@@ -1152,7 +1152,10 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 		{
 			auto const functionPtr = dynamic_cast<FunctionTypePointer>(&type(*arguments[0]));
 			solAssert(functionPtr, "");
-			selector = formatNumber(util::selectorFromSignature(functionPtr->externalSignature()));
+			if (functionPtr->hasDeclaration())
+				selector = formatNumber(util::selectorFromSignature(functionPtr->externalSignature()));
+			else
+				selector = IRVariable(*arguments[0]).part("functionSelector").name();
 		}
 		else if (functionType->kind() == FunctionType::Kind::ABIEncodeWithSignature)
 		{

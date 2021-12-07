@@ -2134,44 +2134,37 @@ void TypeChecker::typeCheckABIEncodeCallFunction(FunctionCall const& _functionCa
 	solAssert(!functionPointerType->takesArbitraryParameters(), "No checks possible for arbitrary parameters.");
 
 	// Tuples with only one component become that component
-	auto const argumentTuple = std::dynamic_pointer_cast<TupleExpression const>(arguments[1]);
-	size_t const numArguments =
-		(argumentTuple && !argumentTuple->isInlineArray()) ?
-		argumentTuple->components().size() :
-		1;
+	vector<ASTPointer<Expression const>> callArguments;
 
-	if (functionPointerType->parameterTypes().size() != numArguments)
+	if (
+		auto const* argumentTuple = dynamic_cast<TupleExpression const*>(arguments[1].get());
+		argumentTuple && !argumentTuple->isInlineArray()
+	)
+		callArguments = decltype(callArguments){argumentTuple->components().begin(), argumentTuple->components().end()};
+	else
+		callArguments.push_back(arguments[1]);
+
+	if (functionPointerType->parameterTypes().size() != callArguments.size())
 		m_errorReporter.typeError(
 			7788_error,
 			_functionCall.location(),
 			"Expected " +
 			to_string(functionPointerType->parameterTypes().size()) +
 			" instead of " +
-			to_string(numArguments) +
+			to_string(callArguments.size()) +
 			" components for the tuple parameter."
 		);
 
-	// Getter to handle tuples with one component
-	auto getArg = [&](size_t _i) -> ASTPointer<Expression const>
-	{
-		if (!argumentTuple)
-		{
-			solAssert(_i == 0, "");
-			return arguments.at(1);
-		}
+	size_t const numParameters = min(callArguments.size(), functionPointerType->parameterTypes().size());
 
-		return argumentTuple->components().at(_i);
-	};
-
-	size_t const numParameters = min(numArguments, functionPointerType->parameterTypes().size());
 	for (size_t i = 0; i < numParameters; i++)
 	{
-		Type const& argType = *type(*getArg(i));
+		Type const& argType = *type(*callArguments[i]);
 		BoolResult result = argType.isImplicitlyConvertibleTo(*functionPointerType->parameterTypes()[i]);
 		if (!result)
 			m_errorReporter.typeError(
 				5407_error,
-				getArg(i)->location(),
+				callArguments[i]->location(),
 				"Cannot implicitly convert component at position " +
 				to_string(i) +
 				" from \"" +
