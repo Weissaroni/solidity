@@ -166,7 +166,7 @@ void LanguageServer::compile()
 	// For files that are not open, we have to take changes on disk into account,
 	// so we just remove all non-open files.
 
-	FileRepository oldRepository(m_repository.basePath());
+	FileRepository oldRepository(m_fileRepository.basePath());
 	swap(oldRepository, m_fileRepository);
 
 	for (string const& fileName: m_openFiles)
