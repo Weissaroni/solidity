@@ -44,7 +44,7 @@ public:
 	frontend::ReadCallback::Callback reader() { return m_fileReader.reader(); }
 
 private:
-	frontend::FileReader m_fileReader = frontend::FileReader{"/", /* base path */};
+	frontend::FileReader m_fileReader;
 };
 
 }
