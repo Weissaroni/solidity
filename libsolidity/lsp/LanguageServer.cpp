@@ -281,7 +281,7 @@ void LanguageServer::handleInitialize(MessageID _id, Json::Value const& _args)
 	else if (Json::Value rootPath = _args["rootPath"])
 		rootPath = rootPath.asString();
 
-	m_fileRepository.setBasePath(boost::filesystem::path(rootPath));
+	m_fileRepository = FileRepository(boost::filesystem::path(rootPath));
 	if (_args["initializationOptions"].isObject())
 		changeConfiguration(_args["initializationOptions"]);
 
