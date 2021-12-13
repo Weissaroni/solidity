@@ -208,7 +208,7 @@ defaults:
             command: pip install --user deepdiff colorama
         - run:
             name: Executing solc LSP test suite
-            command: ./scripts/test_solidity_lsp.py
+            command: ./scripts/test_solidity_lsp.py ./build/solc/solc
         - gitter_notify_failure_unless_pr
 
   - steps_soltest_all: &steps_soltest_all
