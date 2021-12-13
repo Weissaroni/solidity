@@ -65,6 +65,7 @@ private:
 	void handleWorkspaceDidChangeConfiguration(MessageID _id, Json::Value const& _args);
 	void handleTextDocumentDidOpen(MessageID _id, Json::Value const& _args);
 	void handleTextDocumentDidChange(MessageID _id, Json::Value const& _args);
+	void handleTextDocumentDidClose(MessageID _id, Json::Value const& _args);
 
 	/// Invoked when the server user-supplied configuration changes (initiated by the client).
 	void changeConfiguration(Json::Value const&);
@@ -94,6 +95,7 @@ private:
 	Transport& m_client;
 	std::map<std::string, Handler> m_handlers;
 
+	std::set<std::string> m_openFiles;
 	FileRepository m_fileRepository;
 
 	frontend::CompilerStack m_compilerStack;

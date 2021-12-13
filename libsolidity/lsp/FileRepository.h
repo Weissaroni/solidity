@@ -28,8 +28,10 @@ namespace solidity::lsp
 class FileRepository
 {
 public:
-	explicit FileRepository(boost::filesystem::path const& _basePath = {}):
+	explicit FileRepository(boost::filesystem::path const& _basePath = "/"):
 		m_fileReader(_basePath) {}
+
+	boost::filesystem::path const& basePath() const { return m_fileReader.basePath(); }
 
 	/// Translates a compiler-internal source unit name to an LSP client path.
 	std::string sourceUnitNameToClientPath(std::string const& _sourceUnitName) const;

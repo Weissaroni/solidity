@@ -96,9 +96,9 @@ LanguageServer::LanguageServer(Transport& _transport):
 		{"initialize", bind(&LanguageServer::handleInitialize, this, _1, _2)},
 		{"initialized", [](auto, auto) {}},
 		{"shutdown", [this](auto, auto) { m_state = State::ShutdownRequested; }},
-		{"textDocument/didChange", bind(&LanguageServer::handleTextDocumentDidChange, this, _1, _2)},
-		{"textDocument/didClose", [](auto, auto) {/*nothing for now*/}},
 		{"textDocument/didOpen", bind(&LanguageServer::handleTextDocumentDidOpen, this, _1, _2)},
+		{"textDocument/didChange", bind(&LanguageServer::handleTextDocumentDidChange, this, _1, _2)},
+		{"textDocument/didClose", bind(&LanguageServer::handleTextDocumentDidClose, this, _1, _2)},
 		{"workspace/didChangeConfiguration", bind(&LanguageServer::handleWorkspaceDidChangeConfiguration, this, _1, _2)},
 	},
 	m_compilerStack{m_fileRepository.reader()}
@@ -163,6 +163,18 @@ void LanguageServer::changeConfiguration(Json::Value const& _settings)
 
 void LanguageServer::compile()
 {
+	// For files that are not open, we have to take changes on disk into account,
+	// so we just remove all non-open files.
+
+	FileRepository oldRepository(m_repository.basePath());
+	swap(oldRepository, m_fileRepository);
+
+	for (string const& fileName: m_openFiles)
+		m_fileRepository.setSourceByClientPath(
+			fileName,
+			oldRepository.sourceUnits().at(oldRepository.clientPathToSourceUnitName(fileName))
+		);
+
 	// TODO: optimize! do not recompile if nothing has changed (file(s) not flagged dirty).
 
 	m_compilerStack.reset(false);
@@ -291,6 +303,7 @@ void LanguageServer::handleInitialize(MessageID _id, Json::Value const& _args)
 	m_client.reply(_id, move(replyArgs));
 }
 
+
 void LanguageServer::handleWorkspaceDidChangeConfiguration(MessageID _id, Json::Value const& _args)
 {
 	if (!checkInitialized(_id))
@@ -310,6 +323,7 @@ void LanguageServer::handleTextDocumentDidOpen(MessageID _id, Json::Value const&
 
 	string text = _args["textDocument"]["text"].asString();
 	string uri = _args["textDocument"]["uri"].asString();
+	m_openFiles.insert(uri);
 	m_fileRepository.setSourceByClientPath(uri, move(text));
 	compileAndUpdateDiagnostics();
 }
@@ -355,6 +369,29 @@ void LanguageServer::handleTextDocumentDidChange(MessageID _id, Json::Value cons
 		}
 		m_fileRepository.setSourceByClientPath(uri, move(text));
 	}
+
+	compileAndUpdateDiagnostics();
+}
+
+void LanguageServer::handleTextDocumentDidClose(MessageID _id, Json::Value const& _args)
+{
+	if (!checkInitialized(_id))
+		return;
+
+	if (!_args["textDocument"])
+		m_client.error(_id, ErrorCode::RequestFailed, "Text document parameter missing.");
+
+	string text = _args["textDocument"]["text"].asString();
+	string uri = _args["textDocument"]["uri"].asString();
+	m_openFiles.erase(uri);
+
+	// didClose means "reset the file to its contents on disk". So we clear diagnostics
+	// and re-compute them. This means it will work both it case it was deleted and in case
+	// it is still imported from somewhere.
+	Json::Value params;
+	params["uri"] = uri;
+	params["diagnostics"] = Json::arrayValue;
+	m_client.notify("textDocument/publishDiagnostics", move(params));
 
 	compileAndUpdateDiagnostics();
 }
