@@ -2131,15 +2131,13 @@ void TypeChecker::typeCheckABIEncodeCallFunction(FunctionCall const& _functionCa
 		return;
 	}
 
-	solAssert(!functionPointerType->takesArbitraryParameters(), "No checks possible for arbitrary parameters.");
+	solAssert(!functionPointerType->takesArbitraryParameters(), "Function must have fixed parameters.");
 
 	// Tuples with only one component become that component
 	vector<ASTPointer<Expression const>> callArguments;
 
-	if (
-		auto const* argumentTuple = dynamic_cast<TupleExpression const*>(arguments[1].get());
-		argumentTuple && !argumentTuple->isInlineArray()
-	)
+	auto const* argumentTuple = dynamic_cast<TupleExpression const*>(arguments[1].get());
+	if (argumentTuple && !argumentTuple->isInlineArray())
 		callArguments = decltype(callArguments){argumentTuple->components().begin(), argumentTuple->components().end()};
 	else
 		callArguments.push_back(arguments[1]);
@@ -2155,6 +2153,7 @@ void TypeChecker::typeCheckABIEncodeCallFunction(FunctionCall const& _functionCa
 			" components for the tuple parameter."
 		);
 
+	// Use min() to check as much as we can before failing fatally
 	size_t const numParameters = min(callArguments.size(), functionPointerType->parameterTypes().size());
 
 	for (size_t i = 0; i < numParameters; i++)

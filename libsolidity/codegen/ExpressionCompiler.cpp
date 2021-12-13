@@ -1249,9 +1249,11 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 
 			ASTNode::listAccept(arguments, *this);
 
+			auto const functionPtr = dynamic_cast<FunctionTypePointer>(arguments[0]->annotation().type);
 			if (function.kind() == FunctionType::Kind::ABIEncodeCall)
 			{
 				solAssert(arguments.size() == 2, "");
+				solAssert(functionPtr, "");
 
 				auto const tupleType = dynamic_cast<TupleType const*>(arguments[1]->annotation().type);
 
@@ -1301,19 +1303,12 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 			{
 				Type const* dataOnStack = nullptr;
 
-				if (function.kind() == FunctionType::Kind::ABIEncodeCall)
+				if (
+					function.kind() == FunctionType::Kind::ABIEncodeCall &&
+					functionPtr->hasDeclaration()
+				)
 				{
-					auto const functionPtr = dynamic_cast<FunctionTypePointer>(arguments[0]->annotation().type);
-					solAssert(functionPtr, "");
-
-					if (functionPtr->hasDeclaration())
-						m_context << util::selectorFromSignature(functionPtr->externalSignature());
-					else
-					{
-						m_context << Instruction::SWAP1 << Instruction::POP;
-						/// need to store it as bytes4
-						utils().leftShiftNumberOnStack(224);
-					}
+					m_context << util::selectorFromSignature(functionPtr->externalSignature());
 					dataOnStack = TypeProvider::fixedBytes(4);
 				}
 				else
@@ -1343,6 +1338,15 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 
 							dataOnStack = TypeProvider::fixedBytes(32);
 						}
+					}
+					else if (function.kind() == FunctionType::Kind::ABIEncodeCall)
+					{
+						// Extract selector from the stack if we can't get it from the
+						// function pointer
+						m_context << Instruction::SWAP1 << Instruction::POP;
+						// need to store it as bytes4
+						utils().leftShiftNumberOnStack(224);
+						dataOnStack = TypeProvider::fixedBytes(4);
 					}
 					else
 						solAssert(function.kind() == FunctionType::Kind::ABIEncodeWithSelector, "");

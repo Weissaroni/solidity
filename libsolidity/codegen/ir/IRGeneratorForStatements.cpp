@@ -1126,7 +1126,7 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 			auto const tuple = dynamic_cast<TupleExpression const*>(arguments[1].get());
 
 			// Account for tuples with one component which become that component
-			if (!tuple)
+			if (!tuple || tuple->isInlineArray())
 				argumentsEncodeFunction.push_back(arguments[1]);
 			else
 				for (auto component: tuple->components())
@@ -1155,7 +1155,10 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 			if (functionPtr->hasDeclaration())
 				selector = formatNumber(util::selectorFromSignature(functionPtr->externalSignature()));
 			else
-				selector = IRVariable(*arguments[0]).part("functionSelector").name();
+				selector = convert(
+					IRVariable(*arguments[0]).part("functionSelector"),
+					*TypeProvider::fixedBytes(4)
+				).name();
 		}
 		else if (functionType->kind() == FunctionType::Kind::ABIEncodeWithSignature)
 		{
