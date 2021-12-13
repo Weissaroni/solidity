@@ -28,6 +28,7 @@
 #include <libsolutil/Visitor.h>
 #include <libsolutil/JSON.h>
 
+#include <boost/exception/diagnostic_information.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 
@@ -236,9 +237,9 @@ bool LanguageServer::run()
 			else
 				m_client.error(id, ErrorCode::MethodNotFound, "Unknown method " + methodName);
 		}
-		catch (exception const& e)
+		catch (exception const& _exception)
 		{
-			m_client.error({}, ErrorCode::InternalError, "Unhandled exception: "s + e.what());
+			m_client.error({}, ErrorCode::InternalError, "Unhandled exception: "s + boost::diagnostic_information(_exception));
 		}
 	}
 	return m_state == State::ExitRequested;
