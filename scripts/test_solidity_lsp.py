@@ -407,6 +407,44 @@ class SolidityLSPTestSuite: # {{{
         self.expect_equal(len(report['diagnostics']), 1, "one diagnostic")
         self.expect_diagnostic(report['diagnostics'][0], code=2072, lineNo=12, startColumn=8, endColumn=19)
 
+    def test_didChange_in_A_causing_error_in_B(self, solc: JsonRpcProcess) -> None:
+        # Reusing another test but now change some file that generates an error in the other.
+        self.test_textDocument_didOpen_with_relative_import(solc)
+        solc.send_message(
+            'textDocument/didChange',
+            {
+                'textDocument':
+                {
+                    'uri': self.get_test_file_uri('lib')
+                },
+                'contentChanges':
+                [
+                    {
+                        'range': {
+                            'start': { 'line':  5, 'character': 0 },
+                            'end':   { 'line': 10, 'character': 0 }
+                        },
+                        'text': "" # deleting function `add`
+                    }
+                ]
+            }
+        )
+        published_diagnostics = self.wait_for_diagnostics(solc, 2)
+        self.expect_equal(len(published_diagnostics), 2, "Diagnostic reports for 2 files")
+
+        # Main file now contains a new diagnostic
+        report = published_diagnostics[0]
+        self.expect_equal(report['uri'], self.get_test_file_uri('didOpen_with_import'))
+        diagnostics = report['diagnostics']
+        self.expect_equal(len(diagnostics), 1, "now, no diagnostics")
+        self.expect_diagnostic(diagnostics[0], code=9582, lineNo=9, startColumn=15, endColumn=22)
+
+        # The modified file retains the same diagnostics.
+        report = published_diagnostics[1]
+        self.expect_equal(report['uri'], self.get_test_file_uri('lib'))
+        self.expect_equal(len(report['diagnostics']), 0)
+        # The warning went away due to the bug in https://github.com/ethereum/solidity/issues/12349
+
     def test_textDocument_didOpen_with_relative_import_without_project_url(self, solc: JsonRpcProcess) -> None:
         self.setup_lsp(solc, expose_project_root=False)
         TEST_NAME = 'didOpen_with_import'
