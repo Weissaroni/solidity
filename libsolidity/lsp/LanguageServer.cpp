@@ -232,12 +232,12 @@ bool LanguageServer::run()
 {
 	while (m_state != State::ExitRequested && m_state != State::ExitWithoutShutdown && !m_client.closed())
 	{
-		optional<Json::Value> const jsonMessage = m_client.receive();
-		if (!jsonMessage)
-			continue;
-
 		try
 		{
+			optional<Json::Value> const jsonMessage = m_client.receive();
+			if (!jsonMessage)
+				continue;
+
 			string const methodName = (*jsonMessage)["method"].asString();
 			MessageID const id = (*jsonMessage)["id"];
 
