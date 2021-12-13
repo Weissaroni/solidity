@@ -232,6 +232,7 @@ bool LanguageServer::run()
 {
 	while (m_state != State::ExitRequested && m_state != State::ExitWithoutShutdown && !m_client.closed())
 	{
+		MessageID id;
 		try
 		{
 			optional<Json::Value> const jsonMessage = m_client.receive();
@@ -239,7 +240,7 @@ bool LanguageServer::run()
 				continue;
 
 			string const methodName = (*jsonMessage)["method"].asString();
-			MessageID const id = (*jsonMessage)["id"];
+			id = (*jsonMessage)["id"];
 
 			if (auto handler = valueOrDefault(m_handlers, methodName))
 				handler(id, (*jsonMessage)["params"]);
@@ -248,7 +249,11 @@ bool LanguageServer::run()
 		}
 		catch (exception const& _exception)
 		{
-			m_client.error({}, ErrorCode::InternalError, "Unhandled exception: "s + boost::diagnostic_information(_exception));
+			m_client.error(id, ErrorCode::InternalError, "Unhandled exception: "s + boost::diagnostic_information(_exception));
+		}
+		catch (...)
+		{
+			m_client.error(id, ErrorCode::InternalError, "Unhandled exception: "s + boost::current_exception_diagnostic_information());
 		}
 	}
 	return m_state == State::ExitRequested;
