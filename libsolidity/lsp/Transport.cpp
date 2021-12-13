@@ -63,11 +63,11 @@ optional<Json::Value> JSONTransport::receive()
 	string const data = util::readBytes(m_input, stoul(headers->at("content-length")));
 
 	Json::Value jsonMessage;
-	string errs;
-	solidity::util::jsonParseStrict(data, jsonMessage, &errs);
-	if (!errs.empty() || !jsonMessage)
+	string jsonParsingErrors;
+	solidity::util::jsonParseStrict(data, jsonMessage, &jsonParsingErrors);
+	if (!jsonParsingErrors.empty() || !jsonMessage)
 	{
-		error({}, ErrorCode::ParseError, "Could not parse RPC JSON payload. " + errs);
+		error({}, ErrorCode::ParseError, "Could not parse RPC JSON payload. " + jsonParsingErrors);
 		return nullopt;
 	}
 
