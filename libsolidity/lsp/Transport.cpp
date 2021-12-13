@@ -64,7 +64,7 @@ optional<Json::Value> JSONTransport::receive()
 	Json::Value jsonMessage;
 	string errs;
 	solidity::util::jsonParseStrict(data, jsonMessage, &errs);
-	if (!errs.empty())
+	if (!errs.empty() || !jsonMessage)
 	{
 		error({}, ErrorCode::ParseError, "Could not parse RPC JSON payload. " + errs);
 		return nullopt;

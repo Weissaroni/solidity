@@ -222,10 +222,7 @@ bool LanguageServer::run()
 	{
 		optional<Json::Value> const jsonMessage = m_client.receive();
 		if (!jsonMessage)
-		{
-			m_client.error({}, ErrorCode::ParseError, "Error parsing JSONRPC request.");
 			continue;
-		}
 
 		try
 		{
