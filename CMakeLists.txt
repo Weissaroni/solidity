@@ -140,7 +140,7 @@ if (TESTS AND NOT EMSCRIPTEN)
 	add_subdirectory(test)
 
 	add_custom_target(lsptest
-		COMMAND ./test/libsolidity/lsp/solc-lsp-test.py
+		COMMAND ./scripts/test_solidity_lsp.py
 		WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 		DEPENDS solc
 	)
