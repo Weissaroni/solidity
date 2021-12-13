@@ -13,6 +13,6 @@ contract D
 {
     function main() public payable returns (uint)
     {
-        MyContract c;// = new MyContract();
+        MyContract c = new MyContract();
     }
 }
