@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
 
 import argparse
-import fnmatch
+import colorama # Enables the use of SGR & CUP terminal VT sequences on Windows.
 import json
 import os
 import subprocess
 
-from typing import List, Any
+from typing import List, Optional, Any
 from deepdiff import DeepDiff
 
 # {{{ JsonRpcProcess
+class BadHeader(Exception):
+    def __init__(self, msg: str):
+        super().__init__("Bad header: " + msg)
+
 class MyEncoder(json.JSONEncoder):
     """
     Encodes an object in JSON
     """
-    def default(self, o): # pylint: disable=E0202
+    def default(self, o):
         return o.__dict__
 
 class JsonRpcProcess:
@@ -46,58 +50,61 @@ class JsonRpcProcess:
             print(f"{SGR_TRACE}{topic}:{SGR_RESET} {message}")
 
     def receive_message(self) -> Any:
-        # `, timeout: float = 2.0`
         # Note, we should make use of timeout to avoid infinite blocking if nothing is received.
-        LEN_HEADER = "Content-Length: "
-        TYPE_HEADER = "Content-Type: "
+        CONTENT_LENGTH_HEADER = "Content-Length: "
+        CONTENT_TYPE_HEADER = "Content-Type: "
         if self.process.stdout == None:
             return None
         message_size = None
         while True:
-            #read header
+            # read header
             line = self.process.stdout.readline()
-            if not line:
+            if line == '':
                 # server quit
                 return None
             line = line.decode("utf-8")
             if not line.endswith("\r\n"):
-                raise RuntimeError("Bad header: missing newline")
+                raise BadHeader("missing newline")
             # remove the "\r\n"
             line = line[:-2]
             if line == "":
                 break # done with the headers
-            if line.startswith(LEN_HEADER):
-                line = line[len(LEN_HEADER):]
+            if line.startswith(CONTENT_LENGTH_HEADER):
+                line = line[len(CONTENT_LENGTH_HEADER):]
                 if not line.isdigit():
-                    raise RuntimeError("Bad header: size is not int")
+                    raise BadHeader("size is not int")
                 message_size = int(line)
-            elif line.startswith(TYPE_HEADER):
+            elif line.startswith(CONTENT_TYPE_HEADER):
                 # nothing todo with type for now.
                 pass
             else:
-                raise RuntimeError("Bad header: unknown header")
-        if not message_size:
-            raise RuntimeError("Bad header: missing size")
+                raise BadHeader("unknown header")
+        if message_size is None:
+            raise BadHeader("missing size")
         rpc_message = self.process.stdout.read(message_size).decode("utf-8")
         json_object = json.loads(rpc_message)
         self.trace('receive_message', json.dumps(json_object, indent=4, sort_keys=True))
         return json_object
 
-    def send_message(self, method_name: str, params: Any) -> None:
+    def send_message(self, method_name: str, params: Optional[dict]) -> None:
         if self.process.stdin == None:
             return
-        message = { 'jsonrpc': '2.0', 'method': method_name, 'params': params }
+        message = {
+            'jsonrpc': '2.0',
+            'method': method_name,
+            'params': params
+        }
         json_string = json.dumps(obj=message, cls=MyEncoder)
         rpc_message = f"Content-Length: {len(json_string)}\r\n\r\n{json_string}"
         self.trace(f'send_message ({method_name})', json.dumps(message, indent=4, sort_keys=True))
-        self.process.stdin.write(rpc_message.encode())
+        self.process.stdin.write(rpc_message.encode("utf-8"))
         self.process.stdin.flush()
 
-    def call_method(self, method_name: str, params: Any) -> Any:
+    def call_method(self, method_name: str, params: Optional[dict]) -> Any:
         self.send_message(method_name, params)
         return self.receive_message()
 
-    def send_notification(self, name: str, params: Any = None) -> None:
+    def send_notification(self, name: str, params: Optional[dict] = None) -> None:
         self.send_message(name, params)
 
 # }}}
@@ -119,46 +126,45 @@ class ExpectationFailed(Exception):
         )
 
 def create_cli_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description='Solidity LSP Test suite')
+    parser = argparse.ArgumentParser(description="Solidity LSP Test suite")
     parser.set_defaults(trace_io=False)
     parser.add_argument(
-        '-T, --trace-io',
-        dest='trace_io',
-        action='store_true',
-        help='Be more verbose by also printing assertions.'
+        "-T, --trace-io",
+        dest="trace_io",
+        action="store_true",
+        help="Be more verbose by also printing assertions."
     )
     parser.set_defaults(print_assertions=False)
     parser.add_argument(
-        '-v, --print-assertions',
-        dest='print_assertions',
-        action='store_true',
-        help='Be more verbose by also printing assertions.'
+        "-v, --print-assertions",
+        dest="print_assertions",
+        action="store_true",
+        help="Be more verbose by also printing assertions."
     )
     parser.add_argument(
-        '-t, --test-pattern',
-        dest='test_pattern',
+        "-t, --test-pattern",
+        dest="test_pattern",
         type=str,
         default="*",
-        help='Filters all available tests by matching against this test pattern (using globbing)',
+        help="Filters all available tests by matching against this test pattern (using globbing)",
         nargs="?"
     )
     parser.add_argument(
-        'solc_path',
+        "solc_path",
         type=str,
-        default="/home/trapni/work/solidity/build/solc/solc",
-        help='Path to solc binary to test against',
+        default="solc",
+        help="Path to solc binary to test against",
         nargs="?"
     )
     parser.add_argument(
-        'project_root_dir',
+        "project_root_dir",
         type=str,
         default=f"{os.path.dirname(os.path.realpath(__file__))}/..",
-        help='Path to Solidity project\'s root directory (must be fully qualified).',
+        help="Path to Solidity project's root directory (must be fully qualified).",
         nargs="?"
     )
     return parser
 
-# pylint: disable-next=too-many-instance-attributes
 class SolidityLSPTestSuite: # {{{
     tests_passed: int = 0
     tests_failed: int = 0
@@ -170,10 +176,11 @@ class SolidityLSPTestSuite: # {{{
     test_pattern: str
 
     def __init__(self):
+        colorama.init()
         args = create_cli_parser().parse_args()
         self.solc_path = args.solc_path
-        self.project_root_dir = os.path.realpath(args.project_root_dir) + '/test/libsolidity/lsp'
-        self.project_root_uri = 'file://' + self.project_root_dir
+        self.project_root_dir = os.path.realpath(args.project_root_dir) + "/test/libsolidity/lsp"
+        self.project_root_uri = "file://" + self.project_root_dir
         self.print_assertions = args.print_assertions
         self.trace_io = args.trace_io
         self.test_pattern = args.test_pattern
@@ -183,11 +190,11 @@ class SolidityLSPTestSuite: # {{{
         Runs all test cases.
         Returns 0 on success and the number of failing assertions (capped to 127) otherwise.
         """
-
-        for method_name in fnmatch.filter(sorted([name for name
-                            in dir(SolidityLSPTestSuite)
-                            if callable(getattr(SolidityLSPTestSuite, name)) and
-                                name.startswith("test_")]), self.test_pattern):
+        for method_name in sorted([
+            name
+            for name in dir(SolidityLSPTestSuite)
+            if callable(getattr(SolidityLSPTestSuite, name)) and name.startswith("test_")
+        ]):
             test_fn = getattr(self, method_name)
             title: str = test_fn.__name__[5:]
             print(f"{SGR_TEST_BEGIN}Testing {title} ...{SGR_RESET}")
@@ -212,7 +219,7 @@ class SolidityLSPTestSuite: # {{{
         Prepares the solc LSP server by calling `initialize`,
         and `initialized` methods.
         """
-        project_root_uri = 'file://' + self.project_root_dir
+        project_root_uri = "file://" + self.project_root_dir
         params = {
             'processId': None,
             'rootPath': self.project_root_dir,
@@ -254,15 +261,17 @@ class SolidityLSPTestSuite: # {{{
         The `test_case_name` will be the basename of the file
         in the test path (test/libsolidity/lsp).
         """
-        return open(self.get_test_file_path(test_case_name), mode="r", encoding="utf-8").read()
+        with open(self.get_test_file_path(test_case_name), mode="r", encoding="utf-8") as f:
+            return f.read()
 
-    def require_params_for_method(self, method_name: str, message: Any) -> Any:
+    def require_params_for_method(self, method_name: str, message: dict) -> Any:
         """
         Ensures the given RPC message does contain the
         field 'method' with the given method name,
         and then returns its passed params.
         An exception is raised on expectation failures.
         """
+        assert message is not None
         if 'error' in message.keys():
             code = message['error']["code"]
             text = message['error']['message']
@@ -286,16 +295,21 @@ class SolidityLSPTestSuite: # {{{
             )
         return sorted(reports, key=lambda x: x['uri'])
 
-    def open_file_and_wait_for_diagnostics(self,
-                                           solc: JsonRpcProcess,
-                                           test_case_name: str,
-                                           diagnostic_reports: int = 1) -> List[Any]:
+    def open_file_and_wait_for_diagnostics(
+        self,
+        solc_process: JsonRpcProcess,
+        test_case_name: str,
+        max_diagnostic_reports: int = 1
+    ) -> List[Any]:
         """
         Opens file for given test case and waits for diagnostics to be published.
         """
-        solc.send_message('textDocument/didOpen',
+        assert max_diagnostic_reports > 0
+        solc_process.send_message(
+            'textDocument/didOpen',
             {
-                'textDocument': {
+                'textDocument':
+                {
                     'uri': self.get_test_file_uri(test_case_name),
                     'languageId': 'Solidity',
                     'version': 1,
@@ -303,7 +317,7 @@ class SolidityLSPTestSuite: # {{{
                 }
             }
         )
-        return self.wait_for_diagnostics(solc, diagnostic_reports)
+        return self.wait_for_diagnostics(solc_process, max_diagnostic_reports)
 
     def expect_equal(self, actual, expected, description="Equality") -> None:
         self.assertion_count = self.assertion_count + 1
@@ -320,13 +334,14 @@ class SolidityLSPTestSuite: # {{{
         print(prefix + SGR_STATUS_FAIL + 'FAILED' + SGR_RESET)
         raise ExpectationFailed(actual, expected)
 
-    # pylint: disable-next=too-many-arguments
     def expect_diagnostic(self, diagnostic, code: int, lineNo: int, startColumn: int, endColumn: int):
         self.expect_equal(diagnostic['code'], code, f'diagnostic: {code}')
         self.expect_equal(
             diagnostic['range'],
-            {'end': {'character': endColumn, 'line': lineNo},
-             'start': {'character': startColumn, 'line': lineNo}},
+            {
+                'end': {'character': endColumn, 'line': lineNo},
+                'start': {'character': startColumn, 'line': lineNo}
+            },
             "diagnostic: check range"
         )
     # }}}
@@ -554,5 +569,5 @@ class SolidityLSPTestSuite: # {{{
 
 if __name__ == "__main__":
     suite = SolidityLSPTestSuite()
-    rv = suite.main()
-    exit(rv)
+    exit_code = suite.main()
+    exit(exit_code)
