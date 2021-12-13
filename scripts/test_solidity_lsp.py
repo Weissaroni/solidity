@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
 import argparse
-import colorama # Enables the use of SGR & CUP terminal VT sequences on Windows.
+import fnmatch
 import json
 import os
 import subprocess
 
-from typing import List, Optional, Any
+from typing import Any, List, Optional, Union
+
+import colorama # Enables the use of SGR & CUP terminal VT sequences on Windows.
 from deepdiff import DeepDiff
 
 # {{{ JsonRpcProcess
@@ -49,7 +51,7 @@ class JsonRpcProcess:
         if self.trace_io:
             print(f"{SGR_TRACE}{topic}:{SGR_RESET} {message}")
 
-    def receive_message(self) -> Any:
+    def receive_message(self) -> Union[None, dict]:
         # Note, we should make use of timeout to avoid infinite blocking if nothing is received.
         CONTENT_LENGTH_HEADER = "Content-Length: "
         CONTENT_TYPE_HEADER = "Content-Type: "
@@ -111,6 +113,7 @@ class JsonRpcProcess:
 
 SGR_RESET = '\033[m'
 SGR_TRACE = '\033[1;36m'
+SGR_NOTICE = '\033[1;35m'
 SGR_TEST_BEGIN = '\033[1;33m'
 SGR_ASSERT_BEGIN = '\033[1;34m'
 SGR_STATUS_OKAY = '\033[1;32m'
@@ -185,16 +188,21 @@ class SolidityLSPTestSuite: # {{{
         self.trace_io = args.trace_io
         self.test_pattern = args.test_pattern
 
+        print(f"{SGR_NOTICE}test pattern: {self.test_pattern}{SGR_RESET}")
+
     def main(self) -> int:
         """
         Runs all test cases.
         Returns 0 on success and the number of failing assertions (capped to 127) otherwise.
         """
-        for method_name in sorted([
-            name
-            for name in dir(SolidityLSPTestSuite)
-            if callable(getattr(SolidityLSPTestSuite, name)) and name.startswith("test_")
-        ]):
+        all_tests = sorted(
+            [
+                name for name in dir(SolidityLSPTestSuite)
+                if callable(getattr(SolidityLSPTestSuite, name)) and name.startswith("test_")
+            ]
+        )
+        filtered_tests = fnmatch.filter(all_tests, self.test_pattern)
+        for method_name in filtered_tests:
             test_fn = getattr(self, method_name)
             title: str = test_fn.__name__[5:]
             print(f"{SGR_TEST_BEGIN}Testing {title} ...{SGR_RESET}")
@@ -287,10 +295,12 @@ class SolidityLSPTestSuite: # {{{
         """
         reports = []
         for _ in range(0, count):
+            message = solc.receive_message()
+            assert message is not None # This can happen if the server aborts early.
             reports.append(
                 self.require_params_for_method(
                     'textDocument/publishDiagnostics',
-                    solc.receive_message()
+                    message,
                 )
             )
         return sorted(reports, key=lambda x: x['uri'])
@@ -432,20 +442,23 @@ class SolidityLSPTestSuite: # {{{
         self.expect_diagnostic(diagnostics[1], code=2072, lineNo= 7, startColumn= 8, endColumn=19)
         self.expect_diagnostic(diagnostics[2], code=2072, lineNo=15, startColumn= 8, endColumn=20)
 
-        solc.send_message('textDocument/didChange', {
-            'textDocument': {
-                'uri': self.get_test_file_uri(TEST_NAME)
-            },
-            'contentChanges': [
-                {
-                    'range': {
-                        'start': { 'line': 7, 'character': 1 },
-                        'end': {   'line': 8, 'character': 1 }
-                    },
-                    'test': ""
-                }
-            ]
-        })
+        solc.send_message(
+            'textDocument/didChange',
+            {
+                'textDocument': {
+                    'uri': self.get_test_file_uri(TEST_NAME)
+                },
+                'contentChanges': [
+                    {
+                        'range': {
+                            'start': { 'line': 7, 'character': 1 },
+                            'end': {   'line': 8, 'character': 1 }
+                        },
+                        'text': ""
+                    }
+                ]
+            }
+        )
         published_diagnostics = self.wait_for_diagnostics(solc, 1)
         self.expect_equal(len(published_diagnostics), 1)
         report = published_diagnostics[0]
@@ -471,7 +484,7 @@ class SolidityLSPTestSuite: # {{{
                         'start': { 'line': 12, 'character': 0 },
                         'end': { 'line': 12, 'character': 20 }
                     },
-                    'test': ""
+                    'text': ""
                 }
             ]
         })
@@ -510,7 +523,7 @@ class SolidityLSPTestSuite: # {{{
                         'start': { 'line': 3, 'character': 7 },
                         'end': { 'line': 3, 'character': 7 }
                     },
-                    'test': " C"
+                    'text': " C"
                 }
             ]
         })
