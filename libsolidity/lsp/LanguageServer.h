@@ -17,9 +17,10 @@
 // SPDX-License-Identifier: GPL-3.0
 #pragma once
 
+#include <libsolidity/lsp/Transport.h>
+#include <libsolidity/lsp/FileRepository.h>
 #include <libsolidity/interface/CompilerStack.h>
 #include <libsolidity/interface/FileReader.h>
-#include <libsolidity/lsp/Transport.h>
 
 #include <json/value.h>
 
@@ -80,13 +81,6 @@ protected:
 	Json::Value toRange(langutil::SourceLocation const& _location) const;
 	Json::Value toJson(langutil::SourceLocation const& _location) const;
 
-	/// Translates an LSP client path to the internal source unit name for the compiler.
-	std::string clientPathToSourceUnitName(std::string const& _path) const;
-	/// Translates a compiler-internal source unit name to an LSP client path.
-	std::string sourceUnitNameToClientPath(std::string const& _sourceUnitName) const;
-	/// @returns true if we store the source for given the LSP client path.
-	bool clientPathSourceKnown(std::string const& _path) const;
-
 	// LSP related member fields
 	using Handler = std::function<void(MessageID, Json::Value const&)>;
 
@@ -97,8 +91,7 @@ protected:
 	/// Server process exit has been requested by the client.
 	bool m_exitRequested = false;
 
-	/// FileReader is used for reading files during comilation phase but is also used as VFS for the LSP.
-	frontend::FileReader m_fileReader;
+	FileRepository m_fileRepository;
 
 	frontend::CompilerStack m_compilerStack;
 

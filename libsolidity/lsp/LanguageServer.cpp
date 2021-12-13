@@ -100,8 +100,7 @@ LanguageServer::LanguageServer(Transport& _transport):
 		{"textDocument/didOpen", bind(&LanguageServer::handleTextDocumentDidOpen, this, _1, _2)},
 		{"workspace/didChangeConfiguration", bind(&LanguageServer::handleWorkspaceDidChangeConfiguration, this, _1, _2)},
 	},
-	m_fileReader{"/" /* base path */},
-	m_compilerStack{bind(&FileReader::readFile, ref(m_fileReader), _1, _2)}
+	m_compilerStack{m_fileRepository.reader()}
 {
 }
 
@@ -110,12 +109,12 @@ optional<SourceLocation> LanguageServer::parsePosition(
 	Json::Value const& _position
 ) const
 {
-	if (!m_fileReader.sourceCodes().count(_sourceUnitName))
+	if (!m_fileRepository.sourceUnits().count(_sourceUnitName))
 		return nullopt;
 
 	if (optional<LineColumn> lineColumn = parseLineColumn(_position))
 		if (optional<int> const offset = CharStream::translateLineColumnToPosition(
-			m_fileReader.sourceCodes().at(_sourceUnitName),
+			m_fileRepository.sourceUnits().at(_sourceUnitName),
 			*lineColumn
 		))
 			return SourceLocation{*offset, *offset, make_shared<string>(_sourceUnitName)};
@@ -151,28 +150,9 @@ Json::Value LanguageServer::toJson(SourceLocation const& _location) const
 {
 	solAssert(_location.sourceName);
 	Json::Value item = Json::objectValue;
-	item["uri"] = sourceUnitNameToClientPath(*_location.sourceName);
+	item["uri"] = m_fileRepository.sourceUnitNameToClientPath(*_location.sourceName);
 	item["range"] = toRange(_location);
 	return item;
-}
-
-string LanguageServer::clientPathToSourceUnitName(string const& _path) const
-{
-	string path = _path;
-	if (path.find("file://") == 0)
-		path = path.substr(7);
-
-	return m_fileReader.cliPathToSourceUnitName(path);
-}
-
-string LanguageServer::sourceUnitNameToClientPath(string const& _sourceUnitName) const
-{
-	return "file://" + (m_fileReader.basePath() / _sourceUnitName).generic_string();
-}
-
-bool LanguageServer::clientPathSourceKnown(string const& _path) const
-{
-	return m_fileReader.sourceCodes().count(clientPathToSourceUnitName(_path));
 }
 
 void LanguageServer::changeConfiguration(Json::Value const& _settings)
@@ -185,7 +165,7 @@ void LanguageServer::compile()
 	// TODO: optimize! do not recompile if nothing has changed (file(s) not flagged dirty).
 
 	m_compilerStack.reset(false);
-	m_compilerStack.setSources(m_fileReader.sourceCodes());
+	m_compilerStack.setSources(m_fileRepository.sourceUnits());
 	m_compilerStack.compile(CompilerStack::State::AnalysisPerformed);
 }
 
@@ -194,7 +174,7 @@ void LanguageServer::compileAndUpdateDiagnostics()
 	compile();
 
 	map<string, Json::Value> diagnosticsBySourceUnit;
-	for (string const& sourceUnitName: m_fileReader.sourceCodes() | ranges::views::keys)
+	for (string const& sourceUnitName: m_fileRepository.sourceUnits() | ranges::views::keys)
 		diagnosticsBySourceUnit[sourceUnitName] = Json::arrayValue;
 
 	for (shared_ptr<Error const> const& error: m_compilerStack.errors())
@@ -226,10 +206,10 @@ void LanguageServer::compileAndUpdateDiagnostics()
 		diagnosticsBySourceUnit[*location->sourceName].append(jsonDiag);
 	}
 
-	for (string const& sourceUnitName: m_fileReader.sourceCodes() | ranges::views::keys)
+	for (string const& sourceUnitName: m_fileRepository.sourceUnits() | ranges::views::keys)
 	{
 		Json::Value params;
-		params["uri"] = sourceUnitNameToClientPath(sourceUnitName);
+		params["uri"] = m_fileRepository.sourceUnitNameToClientPath(sourceUnitName);
 		params["diagnostics"] = move(diagnosticsBySourceUnit.at(sourceUnitName));
 		m_client.notify("textDocument/publishDiagnostics", move(params));
 	}
@@ -282,7 +262,7 @@ void LanguageServer::handleInitialize(MessageID _id, Json::Value const& _args)
 	else if (Json::Value rootPath = _args["rootPath"])
 		rootPath = rootPath.asString();
 
-	m_fileReader.setBasePath(boost::filesystem::path(rootPath));
+	m_fileRepository.setBasePath(boost::filesystem::path(rootPath));
 	if (_args["initializationOptions"].isObject())
 		changeConfiguration(_args["initializationOptions"]);
 
@@ -308,7 +288,7 @@ void LanguageServer::handleTextDocumentDidOpen(MessageID _id, Json::Value const&
 
 	string text = _args["textDocument"]["text"].asString();
 	string uri = _args["textDocument"]["uri"].asString();
-	m_fileReader.setSourceDirectly(clientPathToSourceUnitName(uri), move(text));
+	m_fileRepository.setSourceByClientPath(uri, move(text));
 	compileAndUpdateDiagnostics();
 }
 
@@ -324,13 +304,13 @@ void LanguageServer::handleTextDocumentDidChange(MessageID _id, Json::Value cons
 			return;
 		}
 
-		if (!clientPathSourceKnown(uri))
+		string const sourceUnitName = m_fileRepository.clientPathToSourceUnitName(uri);
+		if (!m_fileRepository.sourceUnits().count(sourceUnitName))
 		{
 			m_client.error(_id, ErrorCode::RequestFailed, "Unknown file: " + uri);
 			return;
 		}
 
-		string const sourceUnitName = clientPathToSourceUnitName(uri);
 		string text = jsonContentChange["text"].asString();
 		if (jsonContentChange["range"].isObject()) // otherwise full content update
 		{
@@ -344,11 +324,11 @@ void LanguageServer::handleTextDocumentDidChange(MessageID _id, Json::Value cons
 				);
 				return;
 			}
-			string buffer = m_fileReader.sourceCodes().at(sourceUnitName);
+			string buffer = m_fileRepository.sourceUnits().at(sourceUnitName);
 			buffer.replace(static_cast<size_t>(change->start), static_cast<size_t>(change->end - change->start), move(text));
 			text = move(buffer);
 		}
-		m_fileReader.setSourceDirectly(sourceUnitName, move(text));
+		m_fileRepository.setSourceByClientPath(uri, move(text));
 	}
 
 	compileAndUpdateDiagnostics();

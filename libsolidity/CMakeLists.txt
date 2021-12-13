@@ -157,6 +157,8 @@ set(sources
 	interface/Version.h
 	lsp/LanguageServer.cpp
 	lsp/LanguageServer.h
+	lsp/FileRepository.cpp
+	lsp/FileRepository.h
 	lsp/Transport.cpp
 	lsp/Transport.h
 	parsing/DocStringParser.cpp
