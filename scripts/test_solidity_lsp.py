@@ -79,8 +79,9 @@ class JsonRpcProcess:
         if not message_size:
             raise RuntimeError("Bad header: missing size")
         rpc_message = self.process.stdout.read(message_size).decode("utf-8")
-        self.trace('receive_message', rpc_message)
-        return json.loads(rpc_message)
+        json_object = json.loads(rpc_message)
+        self.trace('receive_message', json.dumps(json_object, indent=4, sort_keys=True))
+        return json_object
 
     def send_message(self, method_name: str, params: Any) -> None:
         if self.process.stdin == None:
@@ -88,7 +89,7 @@ class JsonRpcProcess:
         message = { 'jsonrpc': '2.0', 'method': method_name, 'params': params }
         json_string = json.dumps(obj=message, cls=MyEncoder)
         rpc_message = f"Content-Length: {len(json_string)}\r\n\r\n{json_string}"
-        self.trace(f'send_message ({method_name})', json_string)
+        self.trace(f'send_message ({method_name})', json.dumps(message, indent=4, sort_keys=True))
         self.process.stdin.write(rpc_message.encode())
         self.process.stdin.flush()
 
@@ -114,7 +115,7 @@ class ExpectationFailed(Exception):
         self.expected = expected
         diff = DeepDiff(actual, expected)
         super().__init__(
-            f"Expectation failed. Expected {expected} but got {actual}. {diff}"
+            f"Expectation failed.\n\tExpected {expected}\n\tbut got {actual}.\n\t{diff}"
         )
 
 def create_cli_parser() -> argparse.ArgumentParser:
