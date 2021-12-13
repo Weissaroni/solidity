@@ -205,7 +205,7 @@ defaults:
             at: build
         - run:
             name: Install dependencies
-            command: pip install --user deepdiff
+            command: pip install --user deepdiff colorama
         - run:
             name: Executing solc LSP test suite
             command: ./scripts/test_solidity_lsp.py
