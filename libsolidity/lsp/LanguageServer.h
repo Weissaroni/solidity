@@ -87,13 +87,13 @@ private:
 	Json::Value toJson(langutil::SourceLocation const& _location) const;
 
 	// LSP related member fields
-	using Handler = std::function<void(MessageID, Json::Value const&)>;
+	using MessageHandler = std::function<void(MessageID, Json::Value const&)>;
 
 	enum class State { Started, Initialized, ShutdownRequested, ExitRequested, ExitWithoutShutdown };
 	State m_state = State::Started;
 
 	Transport& m_client;
-	std::map<std::string, Handler> m_handlers;
+	std::map<std::string, MessageHandler> m_handlers;
 
 	std::set<std::string> m_openFiles;
 	FileRepository m_fileRepository;
