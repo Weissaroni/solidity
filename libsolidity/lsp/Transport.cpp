@@ -35,7 +35,8 @@ JSONTransport::JSONTransport(istream& _in, ostream& _out):
 {
 }
 
-JSONTransport::JSONTransport(): JSONTransport(cin, cout)
+JSONTransport::JSONTransport():
+	JSONTransport(cin, cout)
 {
 }
 
