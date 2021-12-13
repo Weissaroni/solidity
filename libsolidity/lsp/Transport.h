@@ -41,6 +41,7 @@ enum class ErrorCode
 	InternalError = -32603,
 
 	// Defined by the protocol.
+	ServerNotInitialized = -32002,
 	RequestFailed = -32803
 };
 

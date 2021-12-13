@@ -91,10 +91,10 @@ LanguageServer::LanguageServer(Transport& _transport):
 	m_handlers{
 		{"$/cancelRequest", [](auto, auto) {/*nothing for now as we are synchronous */}},
 		{"cancelRequest", [](auto, auto) {/*nothing for now as we are synchronous */}},
-		{"exit", [this](auto, auto) { m_exitRequested = true; }},
+		{"exit", [this](auto, auto) { m_state = m_state == State::ShutdownRequested ? State::ExitRequested : State::ExitWithoutShutdown; }},
 		{"initialize", bind(&LanguageServer::handleInitialize, this, _1, _2)},
 		{"initialized", [](auto, auto) {}},
-		{"shutdown", [this](auto, auto) { m_shutdownRequested = true; }},
+		{"shutdown", [this](auto, auto) { m_state = State::ShutdownRequested; }},
 		{"textDocument/didChange", bind(&LanguageServer::handleTextDocumentDidChange, this, _1, _2)},
 		{"textDocument/didClose", [](auto, auto) {/*nothing for now*/}},
 		{"textDocument/didOpen", bind(&LanguageServer::handleTextDocumentDidOpen, this, _1, _2)},
@@ -217,7 +217,7 @@ void LanguageServer::compileAndUpdateDiagnostics()
 
 bool LanguageServer::run()
 {
-	while (!m_exitRequested && !m_client.closed())
+	while (m_state != State::ExitRequested && m_state != State::ExitWithoutShutdown && !m_client.closed())
 	{
 		optional<Json::Value> const jsonMessage = m_client.receive();
 		if (!jsonMessage)
@@ -241,11 +241,29 @@ bool LanguageServer::run()
 			m_client.error({}, ErrorCode::InternalError, "Unhandled exception: "s + e.what());
 		}
 	}
-	return m_shutdownRequested;
+	return m_state == State::ExitRequested;
+}
+
+bool LanguageServer::checkInitialized(MessageID _id)
+{
+	if (m_state != State::Initialized)
+	{
+		m_client.error(_id, ErrorCode::ServerNotInitialized, "Server is not properly initialized.");
+		return false;
+	}
+	else
+		return true;
 }
 
 void LanguageServer::handleInitialize(MessageID _id, Json::Value const& _args)
 {
+	if (m_state != State::Started)
+	{
+		m_client.error(_id, ErrorCode::RequestFailed, "Initialize called at the wrong time.");
+		return;
+	}
+	m_state = State::Initialized;
+
 	// The default of FileReader is to use `.`, but the path from where the LSP was started
 	// should not matter.
 	string rootPath("/");
@@ -275,14 +293,20 @@ void LanguageServer::handleInitialize(MessageID _id, Json::Value const& _args)
 	m_client.reply(_id, move(replyArgs));
 }
 
-void LanguageServer::handleWorkspaceDidChangeConfiguration(MessageID, Json::Value const& _args)
+void LanguageServer::handleWorkspaceDidChangeConfiguration(MessageID _id, Json::Value const& _args)
 {
+	if (!checkInitialized(_id))
+		return;
+
 	if (_args["settings"].isObject())
 		changeConfiguration(_args["settings"]);
 }
 
 void LanguageServer::handleTextDocumentDidOpen(MessageID _id, Json::Value const& _args)
 {
+	if (!checkInitialized(_id))
+		return;
+
 	if (!_args["textDocument"])
 		m_client.error(_id, ErrorCode::RequestFailed, "Text document parameter missing.");
 
@@ -294,6 +318,9 @@ void LanguageServer::handleTextDocumentDidOpen(MessageID _id, Json::Value const&
 
 void LanguageServer::handleTextDocumentDidChange(MessageID _id, Json::Value const& _args)
 {
+	if (!checkInitialized(_id))
+		return;
+
 	string const uri = _args["textDocument"]["uri"].asString();
 
 	for (Json::Value jsonContentChange: _args["contentChanges"])

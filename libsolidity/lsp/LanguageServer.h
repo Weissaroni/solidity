@@ -35,10 +35,11 @@ namespace solidity::lsp
 
 enum class ErrorCode;
 
-/// Solidity Language Server, managing one LSP client.
-///
-/// This implements a subset of LSP version 3.16 that can be found at:
-///     https://microsoft.github.io/language-server-protocol/specifications/specification-3-16/
+/**
+ * Solidity Language Server, managing one LSP client.
+ * This implements a subset of LSP version 3.16 that can be found at:
+ * https://microsoft.github.io/language-server-protocol/specifications/specification-3-16/
+ */
 class LanguageServer
 {
 public:
@@ -56,7 +57,10 @@ public:
 	/// @return boolean indicating normal or abnormal termination.
 	bool run();
 
-protected:
+private:
+	/// Checks if the server is initialized (to be used by messages that need it to be initialized).
+	/// Reports an error and returns false if not.
+	bool checkInitialized(MessageID _id);
 	void handleInitialize(MessageID _id, Json::Value const& _args);
 	void handleWorkspaceDidChangeConfiguration(MessageID _id, Json::Value const& _args);
 	void handleTextDocumentDidOpen(MessageID _id, Json::Value const& _args);
@@ -84,12 +88,11 @@ protected:
 	// LSP related member fields
 	using Handler = std::function<void(MessageID, Json::Value const&)>;
 
+	enum class State { Started, Initialized, ShutdownRequested, ExitRequested, ExitWithoutShutdown };
+	State m_state = State::Started;
+
 	Transport& m_client;
 	std::map<std::string, Handler> m_handlers;
-	/// Server shutdown (but not process exit) has been requested by the client.
-	bool m_shutdownRequested = false;
-	/// Server process exit has been requested by the client.
-	bool m_exitRequested = false;
 
 	FileRepository m_fileRepository;
 
