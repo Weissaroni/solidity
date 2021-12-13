@@ -404,6 +404,44 @@ class SolidityLSPTestSuite: # {{{
         self.expect_equal(len(report['diagnostics']), 1, "one diagnostic")
         self.expect_diagnostic(report['diagnostics'][0], code=2072, lineNo=12, startColumn=8, endColumn=19)
 
+    def test_textDocument_didChange_updates_diagnostics(self, solc: JsonRpcProcess) -> None:
+        self.setup_lsp(solc)
+        TEST_NAME = 'publish_diagnostics_1'
+        published_diagnostics = self.open_file_and_wait_for_diagnostics(solc, TEST_NAME)
+        self.expect_equal(len(published_diagnostics), 1, "One published_diagnostics message")
+        report = published_diagnostics[0]
+        self.expect_equal(report['uri'], self.get_test_file_uri(TEST_NAME), "Correct file URI")
+        diagnostics = report['diagnostics']
+        self.expect_equal(len(diagnostics), 3, "3 diagnostic messages")
+        self.expect_diagnostic(diagnostics[0], code=6321, lineNo=13, startColumn=44, endColumn=48)
+        self.expect_diagnostic(diagnostics[1], code=2072, lineNo= 7, startColumn= 8, endColumn=19)
+        self.expect_diagnostic(diagnostics[2], code=2072, lineNo=15, startColumn= 8, endColumn=20)
+
+        solc.send_message('textDocument/didChange', {
+            'textDocument': {
+                'uri': self.get_test_file_uri(TEST_NAME)
+            },
+            'contentChanges': [
+                {
+                    'range': {
+                        'start': { 'line': 7, 'character': 1 },
+                        'end': {   'line': 8, 'character': 1 }
+                    },
+                    'test': ""
+                }
+            ]
+        })
+        published_diagnostics = self.wait_for_diagnostics(solc, 1)
+        self.expect_equal(len(published_diagnostics), 1)
+        report = published_diagnostics[0]
+        self.expect_equal(report['uri'], self.get_test_file_uri(TEST_NAME), "Correct file URI")
+        diagnostics = report['diagnostics']
+        text = report['_text']
+        solc.trace("Document text", "\n" + text)
+        self.expect_equal(len(diagnostics), 2)
+        self.expect_diagnostic(diagnostics[0], code=6321, lineNo=12, startColumn=44, endColumn=48)
+        self.expect_diagnostic(diagnostics[1], code=2072, lineNo=14, startColumn= 8, endColumn=20)
+
     def test_textDocument_didChange_delete_line(self, solc: JsonRpcProcess) -> None:
         # Reuse this test to prepare and ensure it is as expected
         self.test_textDocument_didOpen_with_relative_import(solc)
