@@ -99,8 +99,7 @@ void JSONTransport::error(MessageID _id, ErrorCode _code, string _message)
 void JSONTransport::send(Json::Value _json, MessageID _id)
 {
 	_json["jsonrpc"] = "2.0";
-	if (!_id.isNull())
-		_json["id"] = _id;
+	_json["id"] = _id;
 
 	string const jsonString = solidity::util::jsonCompactPrint(_json);
 
