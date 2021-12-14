@@ -20,6 +20,7 @@
 #include <libsolutil/JSON.h>
 #include <libsolutil/Visitor.h>
 #include <libsolutil/CommonIO.h>
+#include <liblangutil/Exceptions.h>
 
 #include <boost/algorithm/string.hpp>
 
@@ -65,7 +66,7 @@ optional<Json::Value> JSONTransport::receive()
 	Json::Value jsonMessage;
 	string jsonParsingErrors;
 	solidity::util::jsonParseStrict(data, jsonMessage, &jsonParsingErrors);
-	if (!jsonParsingErrors.empty() || !jsonMessage)
+	if (!jsonParsingErrors.empty() || !jsonMessage || !jsonMessage.isObject())
 	{
 		error({}, ErrorCode::ParseError, "Could not parse RPC JSON payload. " + jsonParsingErrors);
 		return nullopt;
@@ -99,6 +100,7 @@ void JSONTransport::error(MessageID _id, ErrorCode _code, string _message)
 
 void JSONTransport::send(Json::Value _json, MessageID _id)
 {
+	solAssert(_json.isObject());
 	_json["jsonrpc"] = "2.0";
 	_json["id"] = _id;
 

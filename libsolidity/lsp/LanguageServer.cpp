@@ -239,13 +239,18 @@ bool LanguageServer::run()
 			if (!jsonMessage)
 				continue;
 
-			string const methodName = (*jsonMessage)["method"].asString();
-			id = (*jsonMessage)["id"];
+			if ((*jsonMessage)["method"].isString())
+			{
+				string const methodName = (*jsonMessage)["method"].asString();
+				id = (*jsonMessage)["id"];
 
-			if (auto handler = valueOrDefault(m_handlers, methodName))
-				handler(id, (*jsonMessage)["params"]);
+				if (auto handler = valueOrDefault(m_handlers, methodName))
+					handler(id, (*jsonMessage)["params"]);
+				else
+					m_client.error(id, ErrorCode::MethodNotFound, "Unknown method " + methodName);
+			}
 			else
-				m_client.error(id, ErrorCode::MethodNotFound, "Unknown method " + methodName);
+				m_client.error({}, ErrorCode::ParseError, "\"method\" has to be a string.");
 		}
 		catch (exception const& _exception)
 		{
