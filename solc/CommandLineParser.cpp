@@ -329,7 +329,7 @@ void CommandLineParser::parseInputPathsAndRemappings()
 			// Keep it working that way for backwards-compatibility.
 			m_options.input.addStdin = true;
 	}
-	else if (m_options.input.paths.size() == 0 && !m_options.input.addStdin && m_options.input.mode != InputMode::LanguageServer)
+	else if (m_options.input.paths.size() == 0 && !m_options.input.addStdin)
 		solThrow(
 			CommandLineValidationError,
 			"No input files given. If you wish to use the standard input please specify \"-\" explicitly."
@@ -457,6 +457,7 @@ void CommandLineParser::parseOutputSelection()
 		case InputMode::Help:
 		case InputMode::License:
 		case InputMode::Version:
+		case InputMode::LanguageServer:
 			solAssert(false);
 		case InputMode::Compiler:
 		case InputMode::CompilerWithASTImport:
@@ -465,7 +466,6 @@ void CommandLineParser::parseOutputSelection()
 			return contains(assemblerModeOutputs, _outputName);
 		case InputMode::StandardJson:
 		case InputMode::Linker:
-		case InputMode::LanguageServer:
 			return false;
 		}
 
@@ -898,7 +898,8 @@ void CommandLineParser::processArgs()
 	if (
 		m_options.input.mode == InputMode::Help ||
 		m_options.input.mode == InputMode::License ||
-		m_options.input.mode == InputMode::Version
+		m_options.input.mode == InputMode::Version ||
+		m_options.input.mode == InputMode::LanguageServer
 	)
 		return;
 
@@ -941,8 +942,7 @@ void CommandLineParser::processArgs()
 	if (
 		m_options.input.mode != InputMode::Compiler &&
 		m_options.input.mode != InputMode::CompilerWithASTImport &&
-		m_options.input.mode != InputMode::Assembler &&
-		m_options.input.mode != InputMode::LanguageServer
+		m_options.input.mode != InputMode::Assembler
 	)
 	{
 		if (!m_args[g_strOptimizeRuns].defaulted())
@@ -1258,11 +1258,7 @@ void CommandLineParser::processArgs()
 	if (m_options.input.mode == InputMode::Compiler)
 		m_options.input.errorRecovery = (m_args.count(g_strErrorRecovery) > 0);
 
-	solAssert(
-		m_options.input.mode == InputMode::Compiler ||
-		m_options.input.mode == InputMode::CompilerWithASTImport ||
-		m_options.input.mode == InputMode::LanguageServer
-	);
+	solAssert(m_options.input.mode == InputMode::Compiler || m_options.input.mode == InputMode::CompilerWithASTImport);
 }
 
 void CommandLineParser::parseCombinedJsonOption()
