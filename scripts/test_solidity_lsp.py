@@ -500,8 +500,6 @@ class SolidityLSPTestSuite: # {{{
         report = published_diagnostics[0]
         self.expect_equal(report['uri'], self.get_test_file_uri(TEST_NAME), "Correct file URI")
         diagnostics = report['diagnostics']
-        text = report['_text']
-        solc.trace("Document text", "\n" + text)
         self.expect_equal(len(diagnostics), 2)
         self.expect_diagnostic(diagnostics[0], code=6321, lineNo=12, startEndColumns=(44, 48))
         self.expect_diagnostic(diagnostics[1], code=2072, lineNo=14, startEndColumns=( 8, 20))
