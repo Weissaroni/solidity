@@ -102,7 +102,8 @@ void JSONTransport::send(Json::Value _json, MessageID _id)
 {
 	solAssert(_json.isObject());
 	_json["jsonrpc"] = "2.0";
-	_json["id"] = _id;
+	if (_id != Json::nullValue)
+		_json["id"] = _id;
 
 	string const jsonString = solidity::util::jsonCompactPrint(_json);
 
