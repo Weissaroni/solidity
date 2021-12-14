@@ -190,13 +190,12 @@ class SolidityLSPTestSuite: # {{{
         """
         all_tests = sorted(
             [
-                name for name in dir(SolidityLSPTestSuite)
-                if callable(getattr(SolidityLSPTestSuite, name)) and name.startswith("test_")
+                str(name)[5:] for name in dir(SolidityLSPTestSuite) if callable(getattr(SolidityLSPTestSuite, name)) and name.startswith("test_")
             ]
         )
         filtered_tests = fnmatch.filter(all_tests, self.test_pattern)
         for method_name in filtered_tests:
-            test_fn = getattr(self, method_name)
+            test_fn = getattr(self, 'test_' + method_name)
             title: str = test_fn.__name__[5:]
             print(f"{SGR_TEST_BEGIN}Testing {title} ...{SGR_RESET}")
             try:
