@@ -48,7 +48,7 @@ enum class ErrorCode
 /**
  * Transport layer API
  *
- * The transport layer API is abstracted so it users become more testable as well as
+ * The transport layer API is abstracted to make LSP more testable as well as
  * this way it could be possible to support other transports (HTTP for example) easily.
  */
 class Transport
