@@ -204,7 +204,10 @@ class SolidityLSPTestSuite: # {{{
                     self.tests_passed = self.tests_passed + 1
             except ExpectationFailed as e:
                 print(f"{e}")
-                self.tests_failed = self.tests_failed + 1
+                self.tests_failed += 1
+            except Exception as e:
+                print(f"Unhandled exception caught: {e}")
+                self.tests_failed += 1
 
         print(
             f"\nSummary:\n\n"
