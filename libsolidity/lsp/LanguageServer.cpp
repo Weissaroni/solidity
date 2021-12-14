@@ -184,6 +184,10 @@ void LanguageServer::compile()
 
 void LanguageServer::compileAndUpdateDiagnostics()
 {
+	// TODO actually I think we need to keep better track of diagnostics.
+	// After a 'didClose', it can happen that previously imported files
+	// are no longer imported, i.e. the set `m_fileRepository.sourceUnits()`
+	// here could be smaller, but we do not clear the diagnostics in the client.
 	compile();
 
 	map<string, Json::Value> diagnosticsBySourceUnit;
