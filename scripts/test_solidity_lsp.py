@@ -188,11 +188,11 @@ class SolidityLSPTestSuite: # {{{
         Runs all test cases.
         Returns 0 on success and the number of failing assertions (capped to 127) otherwise.
         """
-        all_tests = sorted(
-            [
-                str(name)[5:] for name in dir(SolidityLSPTestSuite) if callable(getattr(SolidityLSPTestSuite, name)) and name.startswith("test_")
-            ]
-        )
+        all_tests = sorted([
+            str(name)[5:]
+            for name in dir(SolidityLSPTestSuite)
+            if callable(getattr(SolidityLSPTestSuite, name)) and name.startswith("test_")
+        ])
         filtered_tests = fnmatch.filter(all_tests, self.test_pattern)
         for method_name in filtered_tests:
             test_fn = getattr(self, 'test_' + method_name)
@@ -505,7 +505,7 @@ class SolidityLSPTestSuite: # {{{
     def test_textDocument_didChange_delete_line(self, solc: JsonRpcProcess) -> None:
         # Reuse this test to prepare and ensure it is as expected
         self.test_textDocument_didOpen_with_relative_import(solc)
-        self.open_file_and_wait_for_diagnostics(solc, 'lib', 2);
+        self.open_file_and_wait_for_diagnostics(solc, 'lib', 2)
         # lib.sol: Fix the unused variable message by removing it.
         solc.send_message(
             'textDocument/didChange',
