@@ -16,13 +16,6 @@ class BadHeader(Exception):
     def __init__(self, msg: str):
         super().__init__("Bad header: " + msg)
 
-class MyEncoder(json.JSONEncoder):
-    """
-    Encodes an object in JSON
-    """
-    def default(self, o):
-        return o.__dict__
-
 class JsonRpcProcess:
     exe_path: str
     exe_args: List[str]
@@ -96,7 +89,7 @@ class JsonRpcProcess:
             'method': method_name,
             'params': params
         }
-        json_string = json.dumps(obj=message, cls=MyEncoder)
+        json_string = json.dumps(obj=message)
         rpc_message = f"Content-Length: {len(json_string)}\r\n\r\n{json_string}"
         self.trace(f'send_message ({method_name})', json.dumps(message, indent=4, sort_keys=True))
         self.process.stdin.write(rpc_message.encode("utf-8"))
@@ -230,7 +223,6 @@ class SolidityLSPTestSuite: # {{{
         project_root_uri = "file://" + self.project_root_dir
         params = {
             'processId': None,
-            'rootPath': self.project_root_dir,
             'rootUri': project_root_uri,
             'trace': 'off',
             'workspaceFolders': [
@@ -252,7 +244,6 @@ class SolidityLSPTestSuite: # {{{
         }
         if expose_project_root == False:
             params['rootUri'] = None
-            params['rootPath'] = None
         lsp.call_method('initialize', params)
         lsp.send_notification('initialized')
 
