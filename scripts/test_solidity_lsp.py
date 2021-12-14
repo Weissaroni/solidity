@@ -224,14 +224,10 @@ class SolidityLSPTestSuite: # {{{
         Prepares the solc LSP server by calling `initialize`,
         and `initialized` methods.
         """
-        project_root_uri = "file://" + self.project_root_dir
         params = {
             'processId': None,
-            'rootUri': project_root_uri,
+            'rootUri': self.project_root_uri,
             'trace': 'off',
-            'workspaceFolders': [
-                {'name': 'solidity-lsp', 'uri': project_root_uri}
-            ],
             'initializationOptions': {},
             'capabilities': {
                 'textDocument': {
