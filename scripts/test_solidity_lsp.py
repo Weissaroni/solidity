@@ -207,7 +207,7 @@ class SolidityLSPTestSuite: # {{{
             except ExpectationFailed as e:
                 print(f"{e}")
                 self.test_counter.failed += 1
-            except Exception as e:
+            except Exception as e: # pragma pylint: disable=broad-except
                 print(f"Unhandled exception caught: {e}")
                 self.test_counter.failed += 1
 
@@ -339,7 +339,9 @@ class SolidityLSPTestSuite: # {{{
         print(prefix + SGR_STATUS_FAIL + 'FAILED' + SGR_RESET)
         raise ExpectationFailed(actual, expected)
 
-    def expect_diagnostic(self, diagnostic, code: int, lineNo: int, startColumn: int, endColumn: int):
+    def expect_diagnostic(self, diagnostic, code: int, lineNo: int, startEndColumns: (int, int)):
+        assert len(startEndColumns) == 2
+        [startColumn, endColumn] = startEndColumns
         self.expect_equal(diagnostic['code'], code, f'diagnostic: {code}')
         self.expect_equal(
             diagnostic['range'],
@@ -364,9 +366,9 @@ class SolidityLSPTestSuite: # {{{
         diagnostics = report['diagnostics']
 
         self.expect_equal(len(diagnostics), 3, "3 diagnostic messages")
-        self.expect_diagnostic(diagnostics[0], code=6321, lineNo=13, startColumn=44, endColumn=48)
-        self.expect_diagnostic(diagnostics[1], code=2072, lineNo= 7, startColumn= 8, endColumn=19)
-        self.expect_diagnostic(diagnostics[2], code=2072, lineNo=15, startColumn= 8, endColumn=20)
+        self.expect_diagnostic(diagnostics[0], code=6321, lineNo=13, startEndColumns=(44, 48))
+        self.expect_diagnostic(diagnostics[1], code=2072, lineNo= 7, startEndColumns=( 8, 19))
+        self.expect_diagnostic(diagnostics[2], code=2072, lineNo=15, startEndColumns=( 8, 20))
 
     def test_publish_diagnostics_errors(self, solc: JsonRpcProcess) -> None:
         self.setup_lsp(solc)
@@ -380,9 +382,9 @@ class SolidityLSPTestSuite: # {{{
         diagnostics = report['diagnostics']
 
         self.expect_equal(len(diagnostics), 3, "3 diagnostic messages")
-        self.expect_diagnostic(diagnostics[0], code=9574, lineNo= 7, startColumn= 8, endColumn=21)
-        self.expect_diagnostic(diagnostics[1], code=6777, lineNo= 8, startColumn= 8, endColumn=15)
-        self.expect_diagnostic(diagnostics[2], code=6160, lineNo=18, startColumn=15, endColumn=36)
+        self.expect_diagnostic(diagnostics[0], code=9574, lineNo= 7, startEndColumns=( 8, 21))
+        self.expect_diagnostic(diagnostics[1], code=6777, lineNo= 8, startEndColumns=( 8, 15))
+        self.expect_diagnostic(diagnostics[2], code=6160, lineNo=18, startEndColumns=(15, 36))
 
     def test_textDocument_didOpen_with_relative_import(self, solc: JsonRpcProcess) -> None:
         self.setup_lsp(solc)
@@ -400,7 +402,7 @@ class SolidityLSPTestSuite: # {{{
         report = published_diagnostics[1]
         self.expect_equal(report['uri'], self.get_test_file_uri('lib'), "Correct file URI")
         self.expect_equal(len(report['diagnostics']), 1, "one diagnostic")
-        self.expect_diagnostic(report['diagnostics'][0], code=2072, lineNo=12, startColumn=8, endColumn=19)
+        self.expect_diagnostic(report['diagnostics'][0], code=2072, lineNo=12, startEndColumns=(8, 19))
 
     def test_didChange_in_A_causing_error_in_B(self, solc: JsonRpcProcess) -> None:
         # Reusing another test but now change some file that generates an error in the other.
@@ -433,7 +435,7 @@ class SolidityLSPTestSuite: # {{{
         self.expect_equal(report['uri'], self.get_test_file_uri('didOpen_with_import'))
         diagnostics = report['diagnostics']
         self.expect_equal(len(diagnostics), 1, "now, no diagnostics")
-        self.expect_diagnostic(diagnostics[0], code=9582, lineNo=9, startColumn=15, endColumn=22)
+        self.expect_diagnostic(diagnostics[0], code=9582, lineNo=9, startEndColumns=(15, 22))
 
         # The modified file retains the same diagnostics.
         report = published_diagnostics[1]
@@ -461,7 +463,7 @@ class SolidityLSPTestSuite: # {{{
         report = published_diagnostics[1]
         self.expect_equal(report['uri'], self.get_test_file_uri('lib'), "Correct file URI")
         self.expect_equal(len(report['diagnostics']), 1, "one diagnostic")
-        self.expect_diagnostic(report['diagnostics'][0], code=2072, lineNo=12, startColumn=8, endColumn=19)
+        self.expect_diagnostic(report['diagnostics'][0], code=2072, lineNo=12, startEndColumns=(8, 19))
 
     def test_textDocument_didChange_updates_diagnostics(self, solc: JsonRpcProcess) -> None:
         self.setup_lsp(solc)
@@ -472,9 +474,9 @@ class SolidityLSPTestSuite: # {{{
         self.expect_equal(report['uri'], self.get_test_file_uri(TEST_NAME), "Correct file URI")
         diagnostics = report['diagnostics']
         self.expect_equal(len(diagnostics), 3, "3 diagnostic messages")
-        self.expect_diagnostic(diagnostics[0], code=6321, lineNo=13, startColumn=44, endColumn=48)
-        self.expect_diagnostic(diagnostics[1], code=2072, lineNo= 7, startColumn= 8, endColumn=19)
-        self.expect_diagnostic(diagnostics[2], code=2072, lineNo=15, startColumn= 8, endColumn=20)
+        self.expect_diagnostic(diagnostics[0], code=6321, lineNo=13, startEndColumns=(44, 48))
+        self.expect_diagnostic(diagnostics[1], code=2072, lineNo= 7, startEndColumns=( 8, 19))
+        self.expect_diagnostic(diagnostics[2], code=2072, lineNo=15, startEndColumns=( 8, 20))
 
         solc.send_message(
             'textDocument/didChange',
@@ -501,8 +503,8 @@ class SolidityLSPTestSuite: # {{{
         text = report['_text']
         solc.trace("Document text", "\n" + text)
         self.expect_equal(len(diagnostics), 2)
-        self.expect_diagnostic(diagnostics[0], code=6321, lineNo=12, startColumn=44, endColumn=48)
-        self.expect_diagnostic(diagnostics[1], code=2072, lineNo=14, startColumn= 8, endColumn=20)
+        self.expect_diagnostic(diagnostics[0], code=6321, lineNo=12, startEndColumns=(44, 48))
+        self.expect_diagnostic(diagnostics[1], code=2072, lineNo=14, startEndColumns=( 8, 20))
 
     def test_textDocument_didChange_delete_line(self, solc: JsonRpcProcess) -> None:
         # Reuse this test to prepare and ensure it is as expected
@@ -575,7 +577,7 @@ class SolidityLSPTestSuite: # {{{
         report1 = published_diagnostics[0]
         self.expect_equal(report1['uri'], FILE_URI, "Correct file URI")
         self.expect_equal(len(report1['diagnostics']), 1, "one diagnostic")
-        self.expect_diagnostic(report1[0], 2314, 3, 11, 12)
+        self.expect_diagnostic(report1[0], 2314, 3, (11, 12))
         # TODO: not done yet. we're getting the wrong diagnostic back (as if we didn't edit)
 
     def test_textDocument_didChange_empty_file(self, solc: JsonRpcProcess) -> None:
@@ -602,8 +604,8 @@ class SolidityLSPTestSuite: # {{{
         report = reports[0]
         published_diagnostics = report['diagnostics']
         self.expect_equal(len(published_diagnostics), 2)
-        self.expect_diagnostic(published_diagnostics[0], code=1878, lineNo=0, startColumn=0, endColumn=0)
-        self.expect_diagnostic(published_diagnostics[1], code=3420, lineNo=0, startColumn=0, endColumn=0)
+        self.expect_diagnostic(published_diagnostics[0], code=1878, lineNo=0, startEndColumns=(0, 0))
+        self.expect_diagnostic(published_diagnostics[1], code=3420, lineNo=0, startEndColumns=(0, 0))
         solc.send_message('textDocument/didChange', {
             'textDocument': {
                 'uri': self.get_test_file_uri('a_new_file')
