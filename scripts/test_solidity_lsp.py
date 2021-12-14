@@ -552,6 +552,8 @@ class SolidityLSPTestSuite: # {{{
             }
         })
         published_diagnostics = self.wait_for_diagnostics(solc, 1)
+        self.expect_equal(len(published_diagnostics), 1, "one publish diagnostics notification")
+        self.expect_equal(len(published_diagnostics[0]['diagnostics']), 0, "no diagnostics")
         solc.send_message('textDocument/didChange', {
             'textDocument': {
                 'uri': FILE_URI
@@ -559,18 +561,19 @@ class SolidityLSPTestSuite: # {{{
             'contentChanges': [
                 {
                     'range': {
-                        'start': { 'line': 3, 'character': 7 },
-                        'end': { 'line': 3, 'character': 7 }
+                        'start': { 'line': 6, 'character': 0 },
+                        'end': { 'line': 6, 'character': 0 }
                     },
                     'text': " C"
                 }
             ]
         })
         published_diagnostics = self.wait_for_diagnostics(solc, 1)
-        self.expect_equal(len(published_diagnostics), 1)
+        self.expect_equal(len(published_diagnostics), 1, "one publish diagnostics notification")
         report1 = published_diagnostics[0]
         self.expect_equal(report1['uri'], FILE_URI, "Correct file URI")
         self.expect_equal(len(report1['diagnostics']), 1, "one diagnostic")
+        self.expect_diagnostic(report1[0], 2314, 3, 11, 12)
         # TODO: not done yet. we're getting the wrong diagnostic back (as if we didn't edit)
 
     def test_textDocument_didChange_empty_file(self, solc: JsonRpcProcess) -> None:
