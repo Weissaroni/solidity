@@ -400,6 +400,7 @@ class SolidityLSPTestSuite: # {{{
     def test_didChange_in_A_causing_error_in_B(self, solc: JsonRpcProcess) -> None:
         # Reusing another test but now change some file that generates an error in the other.
         self.test_textDocument_didOpen_with_relative_import(solc)
+        self.open_file_and_wait_for_diagnostics(solc, 'lib', 2)
         solc.send_message(
             'textDocument/didChange',
             {
@@ -501,29 +502,36 @@ class SolidityLSPTestSuite: # {{{
     def test_textDocument_didChange_delete_line(self, solc: JsonRpcProcess) -> None:
         # Reuse this test to prepare and ensure it is as expected
         self.test_textDocument_didOpen_with_relative_import(solc)
+        self.open_file_and_wait_for_diagnostics(solc, 'lib', 2);
         # lib.sol: Fix the unused variable message by removing it.
-        solc.send_message('textDocument/didChange', {
-            'textDocument': {
-                'uri': self.get_test_file_uri('lib')
-            },
-            'contentChanges': [
+        solc.send_message(
+            'textDocument/didChange',
+            {
+                'textDocument':
                 {
-                    'range': {
-                        'start': { 'line': 12, 'character': 0 },
-                        'end': { 'line': 12, 'character': 20 }
-                    },
-                    'text': ""
-                }
-            ]
-        })
+                    'uri': self.get_test_file_uri('lib')
+                },
+                'contentChanges': # delete the in-body statement: `uint unused;`
+                [
+                    {
+                        'range':
+                        {
+                            'start': { 'line': 12, 'character': 1 },
+                            'end':   { 'line': 13, 'character': 1 }
+                        },
+                        'text': ""
+                    }
+                ]
+            }
+        )
         published_diagnostics = self.wait_for_diagnostics(solc, 2)
-        self.expect_equal(len(published_diagnostics), 2)
+        self.expect_equal(len(published_diagnostics), 2, "published diagnostics count")
         report1 = published_diagnostics[0]
         self.expect_equal(report1['uri'], self.get_test_file_uri('didOpen_with_import'), "Correct file URI")
-        self.expect_equal(len(report1['diagnostics']), 0, "no diagnostics")
+        self.expect_equal(len(report1['diagnostics']), 0, "no diagnostics in didOpen_with_import.sol")
         report2 = published_diagnostics[1]
         self.expect_equal(report2['uri'], self.get_test_file_uri('lib'), "Correct file URI")
-        self.expect_equal(len(report2['diagnostics']), 0, "no diagnostics")
+        self.expect_equal(len(report2['diagnostics']), 0, "no diagnostics in lib.sol")
 
     def test_textDocument_didChange_at_eol(self, solc: JsonRpcProcess) -> None:
         """
