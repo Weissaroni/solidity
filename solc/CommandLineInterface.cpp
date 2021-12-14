@@ -897,7 +897,8 @@ void CommandLineInterface::handleAst()
 void CommandLineInterface::serveLSP()
 {
 	lsp::JSONTransport transport;
-	lsp::LanguageServer{transport}.run();
+	if (!lsp::LanguageServer{transport}.run())
+		solThrow(CommandLineExecutionError, "LSP terminated abnormally.");
 }
 
 void CommandLineInterface::link()
