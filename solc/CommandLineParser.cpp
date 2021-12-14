@@ -898,8 +898,7 @@ void CommandLineParser::processArgs()
 	if (
 		m_options.input.mode == InputMode::Help ||
 		m_options.input.mode == InputMode::License ||
-		m_options.input.mode == InputMode::Version ||
-		m_options.input.mode == InputMode::LanguageServer
+		m_options.input.mode == InputMode::Version
 	)
 		return;
 
@@ -921,6 +920,9 @@ void CommandLineParser::processArgs()
 			"The following options are not supported in the current input mode: " +
 			joinOptionNames(invalidOptionsForCurrentInputMode)
 		);
+
+	if (m_options.input.mode == InputMode::LanguageServer)
+		return;
 
 	checkMutuallyExclusive({g_strColor, g_strNoColor});
 
