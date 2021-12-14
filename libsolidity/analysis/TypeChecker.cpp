@@ -2136,15 +2136,18 @@ void TypeChecker::typeCheckABIEncodeCallFunction(FunctionCall const& _functionCa
 	// Tuples with only one component become that component
 	vector<ASTPointer<Expression const>> callArguments;
 
-	auto const* argumentTuple = dynamic_cast<TupleExpression const*>(arguments[1].get());
-	if (argumentTuple && !argumentTuple->isInlineArray())
-		callArguments = decltype(callArguments){argumentTuple->components().begin(), argumentTuple->components().end()};
+	auto const* tupleType = dynamic_cast<TupleType const*>(type(*arguments[1]));
+	if (tupleType)
+	{
+		auto const& argumentTuple = dynamic_cast<TupleExpression const&>(*arguments[1].get());
+		callArguments = decltype(callArguments){argumentTuple.components().begin(), argumentTuple.components().end()};
+	}
 	else
 		callArguments.push_back(arguments[1]);
 
 	if (functionPointerType->parameterTypes().size() != callArguments.size())
 	{
-		if (argumentTuple && !argumentTuple->isInlineArray())
+		if (tupleType)
 			m_errorReporter.typeError(
 				7788_error,
 				_functionCall.location(),
@@ -2163,7 +2166,6 @@ void TypeChecker::typeCheckABIEncodeCallFunction(FunctionCall const& _functionCa
 				" components instead of a single non-tuple parameter."
 			);
 	}
-
 
 	// Use min() to check as much as we can before failing fatally
 	size_t const numParameters = min(callArguments.size(), functionPointerType->parameterTypes().size());

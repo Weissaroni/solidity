@@ -81,7 +81,7 @@ Global Variables
 - ``abi.encodeWithSelector(bytes4 selector, ...) returns (bytes memory)``: :ref:`ABI <ABI>`-encodes
   the given arguments starting from the second and prepends the given four-byte selector
 - ``abi.encodeCall(function functionPointer, (...)) returns (bytes memory)``: ABI-encodes a call to ``functionPointer`` with the arguments found in the
-  tuple. Performs a full type-check, ensuring the types match the function signature. Equivalent to `bytes.concat(functionPointer.selector, abi.encodeWithSelector(...))`
+  tuple. Performs a full type-check, ensuring the types match the function signature. Equivalent to ``bytes.concat(functionPointer.selector, abi.encodeWithSelector(...))``
 - ``abi.encodeWithSignature(string memory signature, ...) returns (bytes memory)``: Equivalent
   to ``abi.encodeWithSelector(bytes4(keccak256(bytes(signature)), ...)``
 - ``bytes.concat(...) returns (bytes memory)``: :ref:`Concatenates variable number of

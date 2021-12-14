@@ -1123,16 +1123,15 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 		if (functionType->kind() == FunctionType::Kind::ABIEncodeCall)
 		{
 			solAssert(arguments.size() == 2, "");
-			auto const tupleExpression = dynamic_pointer_cast<TupleExpression const>(arguments[1]);
-			auto const tupleType = dynamic_cast<TupleExpression const*>(arguments[1].get());
-
-			solAssert(!tupleType || tupleExpression, "Tuple type without tuple expression?!");
 			// Account for tuples with one component which become that component
-			if (!tupleType || tupleExpression->isInlineArray())
-				argumentsOfEncodeFunction.push_back(arguments[1]);
-			else
-				for (auto component: tupleExpression->components())
+			if (type(*arguments[1]).category() == Type::Category::Tuple)
+			{
+				auto const& tupleExpression = dynamic_cast<TupleExpression const&>(*arguments[1]);
+				for (auto component: tupleExpression.components())
 					argumentsOfEncodeFunction.push_back(component);
+			}
+			else
+				argumentsOfEncodeFunction.push_back(arguments[1]);
 		}
 		else
 			for (size_t i = 0; i < arguments.size(); ++i)
@@ -1151,17 +1150,10 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 		}
 
 		if (functionType->kind() == FunctionType::Kind::ABIEncodeCall)
-		{
-			auto const functionPtr = dynamic_cast<FunctionTypePointer>(&type(*arguments[0]));
-			solAssert(functionPtr, "");
-			if (functionPtr->hasDeclaration())
-				selector = formatNumber(util::selectorFromSignature(functionPtr->externalSignature()));
-			else
-				selector = convert(
-					IRVariable(*arguments[0]).part("functionSelector"),
-					*TypeProvider::fixedBytes(4)
-				).name();
-		}
+			selector = convert(
+				IRVariable(*arguments[0]).part("functionSelector"),
+				*TypeProvider::fixedBytes(4)
+			).name();
 		else if (functionType->kind() == FunctionType::Kind::ABIEncodeWithSignature)
 		{
 			// hash the signature
