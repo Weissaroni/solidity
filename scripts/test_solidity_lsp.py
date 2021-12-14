@@ -504,7 +504,7 @@ class SolidityLSPTestSuite: # {{{
         self.expect_diagnostic(diagnostics[0], code=6321, lineNo=12, startEndColumns=(44, 48))
         self.expect_diagnostic(diagnostics[1], code=2072, lineNo=14, startEndColumns=( 8, 20))
 
-    def test_textDocument_didChange_delete_line(self, solc: JsonRpcProcess) -> None:
+    def test_textDocument_didChange_delete_line_and_close(self, solc: JsonRpcProcess) -> None:
         # Reuse this test to prepare and ensure it is as expected
         self.test_textDocument_didOpen_with_relative_import(solc)
         self.open_file_and_wait_for_diagnostics(solc, 'lib', 2)
@@ -537,6 +537,20 @@ class SolidityLSPTestSuite: # {{{
         report2 = published_diagnostics[1]
         self.expect_equal(report2['uri'], self.get_test_file_uri('lib'), "Correct file URI")
         self.expect_equal(len(report2['diagnostics']), 0, "no diagnostics in lib.sol")
+
+        # Now close the file and expect the warning to re-appear
+        print("closing")
+        solc.send_message(
+            'textDocument/didClose',
+            { 'textDocument': { 'uri': self.get_test_file_uri('lib') }}
+        )
+        # We first receive a "clear diagnostics" message and then the server re-computes them.
+        published_diagnostics = self.wait_for_diagnostics(solc, 1)
+        self.expect_equal(len(published_diagnostics), 1, "published diagnostics count")
+        self.expect_equal(len(published_diagnostics[0]['diagnostics']), 0, "diagnostics cleared")
+
+        published_diagnostics = self.wait_for_diagnostics(solc, 2)
+        self.verify_didOpen_with_import_diagnostics(published_diagnostics)
 
     def test_textDocument_didChange_at_eol(self, solc: JsonRpcProcess) -> None:
         """
