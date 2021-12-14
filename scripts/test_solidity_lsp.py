@@ -566,17 +566,35 @@ class SolidityLSPTestSuite: # {{{
                         'start': { 'line': 6, 'character': 0 },
                         'end': { 'line': 6, 'character': 0 }
                     },
-                    'text': " C"
+                    'text': " f"
                 }
             ]
         })
         published_diagnostics = self.wait_for_diagnostics(solc, 1)
         self.expect_equal(len(published_diagnostics), 1, "one publish diagnostics notification")
-        report1 = published_diagnostics[0]
-        self.expect_equal(report1['uri'], FILE_URI, "Correct file URI")
-        self.expect_equal(len(report1['diagnostics']), 1, "one diagnostic")
-        self.expect_diagnostic(report1[0], 2314, 3, (11, 12))
-        # TODO: not done yet. we're getting the wrong diagnostic back (as if we didn't edit)
+        report2 = published_diagnostics[0]
+        self.expect_equal(report2['uri'], FILE_URI, "Correct file URI")
+        self.expect_equal(len(report2['diagnostics']), 1, "one diagnostic")
+        self.expect_diagnostic(report2['diagnostics'][0], 7858, 6, (1, 2))
+
+        solc.send_message('textDocument/didChange', {
+            'textDocument': { 'uri': FILE_URI },
+            'contentChanges': [
+                {
+                    'range': {
+                        'start': { 'line': 6, 'character': 2 },
+                        'end': { 'line': 6, 'character': 2 }
+                    },
+                    'text': 'unction f() public {}'
+                }
+            ]
+        })
+        published_diagnostics = self.wait_for_diagnostics(solc, 1)
+        self.expect_equal(len(published_diagnostics), 1, "one publish diagnostics notification")
+        report3 = published_diagnostics[0]
+        self.expect_equal(report3['uri'], FILE_URI, "Correct file URI")
+        self.expect_equal(len(report3['diagnostics']), 1, "one diagnostic")
+        self.expect_diagnostic(report3['diagnostics'][0], 4126, 6, (1, 23))
 
     def test_textDocument_didChange_empty_file(self, solc: JsonRpcProcess) -> None:
         """
@@ -620,6 +638,85 @@ class SolidityLSPTestSuite: # {{{
         })
         published_diagnostics = self.wait_for_diagnostics(solc, 2)
         self.verify_didOpen_with_import_diagnostics(published_diagnostics, 'a_new_file')
+
+    def test_textDocument_didChange_multi_line(self, solc: JsonRpcProcess) -> None:
+        """
+        Starts with an empty file and changes it to multiple times, changing
+        content across lines.
+        """
+        self.setup_lsp(solc)
+        FILE_NAME = 'didChange_template'
+        FILE_URI = self.get_test_file_uri(FILE_NAME)
+        solc.send_message('textDocument/didOpen', {
+            'textDocument': {
+                'uri': FILE_URI,
+                'languageId': 'Solidity',
+                'version': 1,
+                'text': self.get_test_file_contents(FILE_NAME)
+            }
+        })
+        published_diagnostics = self.wait_for_diagnostics(solc, 1)
+        self.expect_equal(len(published_diagnostics), 1, "one publish diagnostics notification")
+        self.expect_equal(len(published_diagnostics[0]['diagnostics']), 0, "no diagnostics")
+        solc.send_message('textDocument/didChange', {
+            'textDocument': { 'uri': FILE_URI },
+            'contentChanges': [
+                {
+                    'range': {
+                        'start': { 'line': 3, 'character': 3 },
+                        'end': { 'line': 4, 'character': 1 }
+                    },
+                    'text': "tract D {\n\n  uint x\n = -1; \n "
+                }
+            ]
+        })
+        published_diagnostics = self.wait_for_diagnostics(solc, 1)
+        self.expect_equal(len(published_diagnostics), 1, "one publish diagnostics notification")
+        report2 = published_diagnostics[0]
+        self.expect_equal(report2['uri'], FILE_URI, "Correct file URI")
+        self.expect_equal(len(report2['diagnostics']), 1, "one diagnostic")
+        self.expect_diagnostic(report2['diagnostics'][0], 7407, 6, (3, 5))
+
+        # Now we are changing the part "x\n = -" of "uint x\n = -1;"
+        solc.send_message('textDocument/didChange', {
+            'textDocument': { 'uri': FILE_URI },
+            'contentChanges': [
+                {
+                    'range': {
+                        'start': { 'line': 5, 'character': 7 },
+                        'end': { 'line': 6, 'character': 4 }
+                    },
+                    'text': "y\n = [\nuint(1),\n3,4]+"
+                }
+            ]
+        })
+        published_diagnostics = self.wait_for_diagnostics(solc, 1)
+        self.expect_equal(len(published_diagnostics), 1, "one publish diagnostics notification")
+        report3 = published_diagnostics[0]
+        self.expect_equal(report3['uri'], FILE_URI, "Correct file URI")
+        self.expect_equal(len(report3['diagnostics']), 2, "two diagnostics")
+        diagnostic = report3['diagnostics'][0]
+        self.expect_equal(diagnostic['code'], 2271, f'diagnostic: 2271')
+        # check multi-line error code
+        self.expect_equal(
+            diagnostic['range'],
+            {
+                'end': {'character': 6, 'line': 8},
+                'start': {'character': 3, 'line': 6}
+            },
+            "diagnostic: check range"
+        )
+        diagnostic = report3['diagnostics'][1]
+        self.expect_equal(diagnostic['code'], 7407, f'diagnostic: 7407')
+        # check multi-line error code
+        self.expect_equal(
+            diagnostic['range'],
+            {
+                'end': {'character': 6, 'line': 8},
+                'start': {'character': 3, 'line': 6}
+            },
+            "diagnostic: check range"
+        )
 
     # }}}
     # }}}
