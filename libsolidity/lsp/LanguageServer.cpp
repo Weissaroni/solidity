@@ -391,7 +391,6 @@ void LanguageServer::handleTextDocumentDidClose(MessageID _id, Json::Value const
 	if (!_args["textDocument"])
 		m_client.error(_id, ErrorCode::RequestFailed, "Text document parameter missing.");
 
-	string text = _args["textDocument"]["text"].asString();
 	string uri = _args["textDocument"]["uri"].asString();
 	m_openFiles.erase(uri);
 
