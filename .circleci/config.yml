@@ -1309,7 +1309,7 @@ workflows:
           nodejs_version: '14'
 
       - t_ems_ext:
-          <<: *workflow_emscripten
+          <<: *workflow_ubuntu2004_static
           name: t_native_test_ext_gnosis
           project: gnosis
           binary_type: native
