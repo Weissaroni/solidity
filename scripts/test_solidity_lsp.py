@@ -279,7 +279,7 @@ class SolidityLSPTestSuite: # {{{
             code = message['error']["code"]
             text = message['error']['message']
             raise RuntimeError(f"Error {code} received. {text}")
-        if not 'method' in message.keys():
+        if 'method' not in message.keys():
             raise RuntimeError("No method received but something else.")
         self.expect_equal(message['method'], method_name, "Ensure expected method name")
         return message['params']
@@ -441,7 +441,7 @@ class SolidityLSPTestSuite: # {{{
         report = published_diagnostics[1]
         self.expect_equal(report['uri'], self.get_test_file_uri('lib'))
         self.expect_equal(len(report['diagnostics']), 0)
-        # The warning went away due to the bug in https://github.com/ethereum/solidity/issues/12349
+        # The warning went away because the compiler aborts further processing after the error.
 
     def test_textDocument_didOpen_with_relative_import_without_project_url(self, solc: JsonRpcProcess) -> None:
         self.setup_lsp(solc, expose_project_root=False)
@@ -449,9 +449,11 @@ class SolidityLSPTestSuite: # {{{
         published_diagnostics = self.open_file_and_wait_for_diagnostics(solc, TEST_NAME, 2)
         self.verify_didOpen_with_import_diagnostics(published_diagnostics)
 
-    def verify_didOpen_with_import_diagnostics(self,
-            published_diagnostics: List[Any],
-            main_file_name='didOpen_with_import'):
+    def verify_didOpen_with_import_diagnostics(
+        self,
+        published_diagnostics: List[Any],
+        main_file_name='didOpen_with_import'
+    ):
         self.expect_equal(len(published_diagnostics), 2, "Diagnostic reports for 2 files")
 
         # primary file:
