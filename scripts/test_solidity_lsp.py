@@ -161,12 +161,14 @@ def create_cli_parser() -> argparse.ArgumentParser:
     )
     return parser
 
+class Counter:
+    total: int = 0
+    passed: int = 0
+    failed: int = 0
+
 class SolidityLSPTestSuite: # {{{
-    tests_passed: int = 0
-    tests_failed: int = 0
-    assertion_count: int = 0   # number of total assertions executed so far
-    assertions_passed: int = 0
-    assertions_failed: int = 0
+    test_counter = Counter()
+    assertion_counter = Counter()
     print_assertions: bool = False
     trace_io: bool = False
     test_pattern: str
@@ -201,21 +203,21 @@ class SolidityLSPTestSuite: # {{{
             try:
                 with JsonRpcProcess(self.solc_path, ["--lsp"], trace_io=self.trace_io) as solc:
                     test_fn(solc)
-                    self.tests_passed = self.tests_passed + 1
+                    self.test_counter.passed += 1
             except ExpectationFailed as e:
                 print(f"{e}")
-                self.tests_failed += 1
+                self.test_counter.failed += 1
             except Exception as e:
                 print(f"Unhandled exception caught: {e}")
-                self.tests_failed += 1
+                self.test_counter.failed += 1
 
         print(
             f"\nSummary:\n\n"
-            f"  Test cases: {self.tests_passed} passed, {self.tests_failed} failed\n"
-            f"  Assertions: {self.assertions_passed} passed, {self.assertions_failed} failed\n"
+            f"  Test cases: {self.test_counter.passed} passed, {self.test_counter.failed} failed\n"
+            f"  Assertions: {self.assertion_counter.passed} passed, {self.assertion_counter.failed} failed\n"
         )
 
-        return min(self.assertions_failed, 127)
+        return min(max(self.test_counter.failed, self.assertion_counter.failed), 127)
 
     def setup_lsp(self, lsp: JsonRpcProcess, expose_project_root=True):
         """
@@ -323,17 +325,17 @@ class SolidityLSPTestSuite: # {{{
         return self.wait_for_diagnostics(solc_process, max_diagnostic_reports)
 
     def expect_equal(self, actual, expected, description="Equality") -> None:
-        self.assertion_count = self.assertion_count + 1
-        prefix = f"[{self.assertion_count}] {SGR_ASSERT_BEGIN}{description}: "
+        self.assertion_counter.total += 1
+        prefix = f"[{self.assertion_counter.total}] {SGR_ASSERT_BEGIN}{description}: "
         diff = DeepDiff(actual, expected)
         if len(diff) == 0:
-            self.assertions_passed = self.assertions_passed + 1
+            self.assertion_counter.passed += 1
             if self.print_assertions:
                 print(prefix + SGR_STATUS_OKAY + 'OK' + SGR_RESET)
             return
 
         # Failed assertions are always printed.
-        self.assertions_failed = self.assertions_failed + 1
+        self.assertion_counter.failed += 1
         print(prefix + SGR_STATUS_FAIL + 'FAILED' + SGR_RESET)
         raise ExpectationFailed(actual, expected)
 
