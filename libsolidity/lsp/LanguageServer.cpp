@@ -264,7 +264,7 @@ bool LanguageServer::run()
 	return m_state == State::ExitRequested;
 }
 
-bool LanguageServer::checkInitialized(MessageID _id)
+bool LanguageServer::checkServerInitialized(MessageID _id)
 {
 	if (m_state != State::Initialized)
 	{
@@ -316,7 +316,7 @@ void LanguageServer::handleInitialize(MessageID _id, Json::Value const& _args)
 
 void LanguageServer::handleWorkspaceDidChangeConfiguration(MessageID _id, Json::Value const& _args)
 {
-	if (!checkInitialized(_id))
+	if (!checkServerInitialized(_id))
 		return;
 
 	if (_args["settings"].isObject())
@@ -325,7 +325,7 @@ void LanguageServer::handleWorkspaceDidChangeConfiguration(MessageID _id, Json::
 
 void LanguageServer::handleTextDocumentDidOpen(MessageID _id, Json::Value const& _args)
 {
-	if (!checkInitialized(_id))
+	if (!checkServerInitialized(_id))
 		return;
 
 	if (!_args["textDocument"])
@@ -340,7 +340,7 @@ void LanguageServer::handleTextDocumentDidOpen(MessageID _id, Json::Value const&
 
 void LanguageServer::handleTextDocumentDidChange(MessageID _id, Json::Value const& _args)
 {
-	if (!checkInitialized(_id))
+	if (!checkServerInitialized(_id))
 		return;
 
 	string const uri = _args["textDocument"]["uri"].asString();
@@ -385,7 +385,7 @@ void LanguageServer::handleTextDocumentDidChange(MessageID _id, Json::Value cons
 
 void LanguageServer::handleTextDocumentDidClose(MessageID _id, Json::Value const& _args)
 {
-	if (!checkInitialized(_id))
+	if (!checkServerInitialized(_id))
 		return;
 
 	if (!_args["textDocument"])

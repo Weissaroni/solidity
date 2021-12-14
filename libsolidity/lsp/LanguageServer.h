@@ -60,7 +60,7 @@ public:
 private:
 	/// Checks if the server is initialized (to be used by messages that need it to be initialized).
 	/// Reports an error and returns false if not.
-	bool checkInitialized(MessageID _id);
+	bool checkServerInitialized(MessageID _id);
 	void handleInitialize(MessageID _id, Json::Value const& _args);
 	void handleWorkspaceDidChangeConfiguration(MessageID _id, Json::Value const& _args);
 	void handleTextDocumentDidOpen(MessageID _id, Json::Value const& _args);
