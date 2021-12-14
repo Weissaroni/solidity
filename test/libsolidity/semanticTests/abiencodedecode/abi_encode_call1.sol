@@ -51,12 +51,12 @@ contract C {
 		function(uint256, string memory) external localFunctionPointer = this.f;
 		return abi.encodeCall(localFunctionPointer, (1, "123"));
 	}
-	function getfunctionPointer() public returns (function(uint256, string memory) external) {
+	function getFunctionPointer() public returns (function(uint256, string memory) external) {
 		sideEffectRan = true;
 		return this.f;
 	}
 	function fReturnedFunctionPointer() public returns (bytes memory) {
-		return abi.encodeCall(getfunctionPointer(), (1, "123"));
+		return abi.encodeCall(getFunctionPointer(), (1, "123"));
 	}
 }
 // ====

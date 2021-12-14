@@ -2143,15 +2143,27 @@ void TypeChecker::typeCheckABIEncodeCallFunction(FunctionCall const& _functionCa
 		callArguments.push_back(arguments[1]);
 
 	if (functionPointerType->parameterTypes().size() != callArguments.size())
-		m_errorReporter.typeError(
-			7788_error,
-			_functionCall.location(),
-			"Expected " +
-			to_string(functionPointerType->parameterTypes().size()) +
-			" instead of " +
-			to_string(callArguments.size()) +
-			" components for the tuple parameter."
-		);
+	{
+		if (argumentTuple && !argumentTuple->isInlineArray())
+			m_errorReporter.typeError(
+				7788_error,
+				_functionCall.location(),
+				"Expected " +
+				to_string(functionPointerType->parameterTypes().size()) +
+				" instead of " +
+				to_string(callArguments.size()) +
+				" components for the tuple parameter."
+			);
+		else
+			m_errorReporter.typeError(
+				7515_error,
+				_functionCall.location(),
+				"Expected a tuple with " +
+				to_string(functionPointerType->parameterTypes().size()) +
+				" components instead of a single non-tuple parameter."
+			);
+	}
+
 
 	// Use min() to check as much as we can before failing fatally
 	size_t const numParameters = min(callArguments.size(), functionPointerType->parameterTypes().size());

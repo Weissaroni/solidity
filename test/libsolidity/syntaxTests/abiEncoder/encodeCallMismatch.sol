@@ -42,4 +42,5 @@ contract C {
 // TypeError 6219: (462-484): Expected two arguments: a function pointer followed by a tuple.
 // TypeError 5511: (562-563): Expected first argument to be a function pointer, not "int_const 1".
 // TypeError 3509: (650-664): Function must be "public" or "external".
-// TypeError 7788: (747-778): Expected 2 instead of 1 components for the tuple parameter.
+// TypeError 7515: (747-778): Expected a tuple with 2 components instead of a single non-tuple parameter.
+// TypeError 5407: (771-777): Cannot implicitly convert component at position 0 from "uint8[2]" to "int256".

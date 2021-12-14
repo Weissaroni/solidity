@@ -1118,19 +1118,21 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 		TypePointers targetTypes;
 		vector<string> argumentVars;
 		string selector;
-		vector<ASTPointer<Expression const>> argumentsEncodeFunction;
+		vector<ASTPointer<Expression const>> argumentsOfEncodeFunction;
 
 		if (functionType->kind() == FunctionType::Kind::ABIEncodeCall)
 		{
 			solAssert(arguments.size() == 2, "");
-			auto const tuple = dynamic_cast<TupleExpression const*>(arguments[1].get());
+			auto const tupleExpression = dynamic_pointer_cast<TupleExpression const>(arguments[1]);
+			auto const tupleType = dynamic_cast<TupleExpression const*>(arguments[1].get());
 
+			solAssert(!tupleType || tupleExpression, "Tuple type without tuple expression?!");
 			// Account for tuples with one component which become that component
-			if (!tuple || tuple->isInlineArray())
-				argumentsEncodeFunction.push_back(arguments[1]);
+			if (!tupleType || tupleExpression->isInlineArray())
+				argumentsOfEncodeFunction.push_back(arguments[1]);
 			else
-				for (auto component: tuple->components())
-					argumentsEncodeFunction.push_back(component);
+				for (auto component: tupleExpression->components())
+					argumentsOfEncodeFunction.push_back(component);
 		}
 		else
 			for (size_t i = 0; i < arguments.size(); ++i)
@@ -1138,10 +1140,10 @@ void IRGeneratorForStatements::endVisit(FunctionCall const& _functionCall)
 				// ignore selector
 				if (hasSelectorOrSignature && i == 0)
 					continue;
-				argumentsEncodeFunction.push_back(arguments[i]);
+				argumentsOfEncodeFunction.push_back(arguments[i]);
 			}
 
-		for (auto const& argument: argumentsEncodeFunction)
+		for (auto const& argument: argumentsOfEncodeFunction)
 		{
 			argumentTypes.emplace_back(&type(*argument));
 			targetTypes.emplace_back(type(*argument).fullEncodingType(false, true, isPacked));

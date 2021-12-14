@@ -1252,13 +1252,16 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 			auto const functionPtr = dynamic_cast<FunctionTypePointer>(arguments[0]->annotation().type);
 			if (function.kind() == FunctionType::Kind::ABIEncodeCall)
 			{
-				solAssert(arguments.size() == 2, "");
-				solAssert(functionPtr, "");
+				solAssert(arguments.size() == 2);
+				solAssert(functionPtr);
 
+				auto const tupleExpression = dynamic_pointer_cast<TupleExpression const>(arguments[1]);
 				auto const tupleType = dynamic_cast<TupleType const*>(arguments[1]->annotation().type);
 
+				solAssert(!tupleType || tupleExpression, "Tuple type without tuple expression?!");
+
 				// Account for tuples with one component which become that component
-				if (!tupleType)
+				if (!tupleType || tupleExpression->isInlineArray())
 					argumentTypes.emplace_back(arguments[1]->annotation().type);
 				else
 					argumentTypes = tupleType->components();
@@ -1341,12 +1344,11 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 					}
 					else if (function.kind() == FunctionType::Kind::ABIEncodeCall)
 					{
-						// Extract selector from the stack if we can't get it from the
-						// function pointer
+						solAssert(functionPtr->sizeOnStack() == 2);
+						// Extract selector from the stack
 						m_context << Instruction::SWAP1 << Instruction::POP;
-						// need to store it as bytes4
-						utils().leftShiftNumberOnStack(224);
-						dataOnStack = TypeProvider::fixedBytes(4);
+						// Conversion will be done below
+						dataOnStack = TypeProvider::uint(32);
 					}
 					else
 						solAssert(function.kind() == FunctionType::Kind::ABIEncodeWithSelector, "");
